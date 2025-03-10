@@ -57,7 +57,7 @@
     }, 1000);*/
 
     $(document).ready(function () {
-      const ws = new WebSocket('ws://localhost:18890');
+      const ws = new WebSocket('ws://'+location.hostname+location.pathname);
 
       ws.onopen = () => {
         console.log('已连接至WebSocket服务器');
