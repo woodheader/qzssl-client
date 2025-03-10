@@ -58,9 +58,13 @@
 
     $(document).ready(function () {
       let pathName = location.pathname.substring(0, location.pathname.lastIndexOf('/')) || '/';
+      pathName = pathName.replace('/', '');
       let url = 'ws://'+location.hostname+pathName;
       if (location.protocol === 'https:') {
         url = 'wss://'+location.hostname+pathName;
+      }
+      if (location.port !== undefined && location.port !== '') {
+        url += ':' + location.port;
       }
       const ws = new WebSocket(url);
 

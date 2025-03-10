@@ -1,14 +1,17 @@
 var express = require('express');
-var app = express();
 var bodyParser = require('body-parser');
 var client = require('./com.wdqz/client');
 var resign = require('./com.wdqz/resign');
+var http = require('http');
+
+// express 应用
+var app = express();
+
+// http server
+var httpServer = http.createServer(app);
 
 // 静态文件目录
 app.use(express.static('../public'));
-
-// 开启任务 - 定期检查证书是否即将过期
-resign.startJob();
 
 // 创建 application/x-www-form-urlencoded 编码解析
 let urlencodedParser = bodyParser.urlencoded({ extended: false });
@@ -99,8 +102,10 @@ app.post('/api/sys-log', urlencodedParser, function (req, res) {
     res.end(JSON.stringify(result));
 });
 
+// 开启任务 - 定期检查证书是否即将过期
+resign.startJob(httpServer);
 
-var resign_server = app.listen(18899, function () {
+var resign_server = httpServer.listen(18899, function () {
     var host = resign_server.address().address
     var port = resign_server.address().port
     host = (host === '::' ? 'localhost' : host);

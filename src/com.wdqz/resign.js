@@ -38,7 +38,7 @@ var qzCreateResignOrder = qzApi + '/ssl-client/validate-and-create-order';
  * - 当有已签发状态的证书，执行 nginx -s reload
  * - 执行完 reload 后，设置续签状态为：续签完成
  */
-function startJob()
+function startJob(httpServer)
 {
     schedule.scheduleJob('*/10 * * * *', function () {
         myutil.writeLog('1、开始从求知平台同步域名数据');
@@ -56,7 +56,7 @@ function startJob()
     });
 
     // 开启wss日志输出server
-    client.wsReadSyslog();
+    client.wsReadSyslog(httpServer);
 }
 
 /**
@@ -74,9 +74,6 @@ function getHostListFromQz()
         if (response.data.code !== 10000) {
             myutil.writeLog('从求知平台同步域名列表失败，原因：' + response.data.msg);
             return false;
-        }
-        if (!fs.existsSync(domainDataPath)) {
-            fs.writeFileSync(domainDataPath, '', 'utf8');
         }
         let domainData = fs.readFileSync(domainDataPath, 'utf8');
         if (util.isNullOrUndefined(domainData) || domainData === '') {

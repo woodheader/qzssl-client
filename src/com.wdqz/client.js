@@ -271,10 +271,10 @@ function getSystemLog()
 /**
  * ws 实时读取日志文件
  */
-function wsReadSyslog()
+function wsReadSyslog(httpServer)
 {
     // WebSocket 服务器配置
-    const wss = new WebSocket.Server({ port: 18890 });
+    const wss = new WebSocket.Server({ server: httpServer });
 
     // 存储所有连接的客户端
     const clients = new Set();
