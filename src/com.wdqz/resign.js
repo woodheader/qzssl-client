@@ -170,16 +170,17 @@ function validateAndCreateOrder()
  */
 function validateAndInstall()
 {
+    if (!fs.existsSync(domainDataPath)) {
+        fs.writeFileSync(domainDataPath, '', 'utf8');
+    }
     let domainJson = fs.readFileSync(domainDataPath, 'utf8');
     if (util.isNullOrUndefined(domainJson) || domainJson === '') {
         return false;
     }
-    /*if (os.platform() !== 'linux') {
+    if (os.platform() !== 'linux') {
         myutil.writeLog('安装证书文件失败，当前仅支持 *nux 系统');
-        // 删除临时生成的证书文件
-        myutil.removeFile(saveZipDir);
         return false;
-    }*/
+    }
     let domainList = JSON.parse(domainJson);
     domainList.forEach((item) => {
         if (item.open_status === 'open') {
