@@ -8,9 +8,6 @@ var getRootPath = function (){
     //webName:--->mbuy
     let webName = pathName === '' ? '' : pathName.substring(0, pathName.indexOf('/'));
     let host = window.location.protocol + '//' + (window.location.host + '/'+ webName + '/').replace('//', '');
-    if (host.indexOf('localhost') === -1 && host.indexOf('dev') === -1) {
-        host = window.location.protocol + '//' + window.location.host + '/';
-    }
     return host;
 };
 
