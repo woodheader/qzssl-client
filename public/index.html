@@ -1,0 +1,311 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <title>QzSSL证书自动化续签客户端</title>
+    <meta name="renderer" content="webkit">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge,chrome=1">
+    <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1">
+    <link rel="stylesheet" href="css/layui/css/layui.css" media="all">
+    <link rel="stylesheet" href="css/font-awesome/css/font-awesome.min.css" media="all">
+    <link rel="stylesheet" href="css/public.css" media="all">
+    <link rel="icon" href="images/favicon.ico">
+</head>
+<body>
+    <div class="layuimini-container">
+        <div class="layuimini-main">
+
+            <div class="layui-row layui-col-space15" style="text-align: center">
+                <div class="layui-col-md12" style="font-size: 30px;">
+                    欢迎使用QzSSL证书自动化续签客户端
+                </div>
+                <div class="layui-col-md12">
+                    当前仅适用于 Linux 系统
+                </div>
+            </div>
+
+            <fieldset class="table-search-fieldset" style="margin-top: 10px">
+                <legend>使用说明</legend>
+                <div style="margin: 10px 10px 10px 10px">
+                    <form class="layui-form layui-form-pane" action="">
+                        <div class="layui-form-item">
+                            <div  class="layui-inline" style="margin-right: 5px;">
+                                <div class="layui-input-inline" style="width: 100%;margin-left: 0px;">
+                                    设置AppId和应用秘钥<br/>
+                                    1、登录<a href="https://web.qzssl.com" target="_blank" style="color:blue;text-decoration: underline;">求知SSL证书平台</a>，应用管理->复制APPID和应用秘钥（若没有，请自行创建）-> 点击<button style="margin-left: 10px" class="layui-btn layui-btn-normal layui-btn-sm" id="config-btn">开始配置</button><br/>
+                                    2、系统将自动从求知平台同步已签发且未过期的域名到此客户端。<br/>
+                                    3、当同步完成后，请自行设置验证文件目录、证书路径，并开启要续签的域名。<br/>
+                                    4、设置完成后，系统将在证书过期一个月内，自动完成续签操作，请保证求知平台的余额充足。<br/><br/>
+                                </div>
+                                <div class="layui-input-inline" style="width: 100%;margin-left: 0px;color: red;">
+                                    注意事项：<br/>
+                                    1、请仔细核对各域名对应的【TXT验证文件的目录】是否正确，否则无法验证通过<br/>
+                                    2、请仔细核对各域名对应的【SSL证书完整路径】是否正确，否则无法安装生效 <br/>
+                                    <span style="color: green">以宝塔为例：登录宝塔 -> 网站 -> 设置 -> 配置文件，ssl_certificate 和 ssl_certificate_key 分别对应证书.pem和秘钥.key的路径</span><br/>
+                                    <span style="color: green">服务器没有安装宝塔的，可ssh登录服务器，在命令行中查看域名的证书配置路径</span>
+                                </div>
+                            </div>
+                        </div>
+                    </form>
+                </div>
+            </fieldset>
+
+            <fieldset class="table-search-fieldset" style="margin-top: 10px">
+                <legend>搜索信息</legend>
+                <div style="margin: 10px 10px 10px 10px">
+                    <form class="layui-form layui-form-pane" action="">
+                        <div class="layui-form-item">
+                            <div class="layui-inline">
+                                <label class="layui-form-label">域名</label>
+                                <div class="layui-input-inline">
+                                    <input type="text" name="host" autocomplete="off" class="layui-input">
+                                </div>
+                            </div>
+                            <div class="layui-inline">
+                                <button type="submit" class="layui-btn layui-btn-primary"  lay-submit lay-filter="data-search-btn"><i class="layui-icon"></i> 搜 索</button>
+                                <button type="reset" class="layui-btn layui-btn-normal"> 重 置</button>
+                            </div>
+                        </div>
+                    </form>
+                </div>
+            </fieldset>
+
+            <script type="text/html" id="appToolBar">
+                <div class="layui-btn-container">
+                    <!--button class="layui-btn layui-btn-normal layui-btn-sm data-add-btn" lay-event="add"> 新增域名 </button-->
+                    <button class="layui-btn layui-btn-sm layui-btn-normal" lay-event="open"> 开启续签 </button>
+                    <button class="layui-btn layui-btn-sm layui-btn-danger data-delete-btn" lay-event="close"> 关闭续签 </button>
+                    <button class="layui-btn layui-btn-sm layui-btn-lg" lay-event="syslog"> 系统日志 </button>
+                </div>
+            </script>
+
+            <table class="layui-hide" id="currentTableId" lay-filter="currentTableFilter"></table>
+
+            <script type="text/html" id="currentTableBar">
+                <a class="layui-btn layui-btn-normal layui-btn-xs data-count-edit" lay-event="edit">编辑</a>
+                <a class="layui-btn layui-btn-xs layui-btn-danger data-count-delete" lay-event="close">关闭续签</a>
+            </script>
+
+        </div>
+    </div>
+
+    <script type="text/html" id="formatEndTime">
+    {{# if (d.open_status === 'open'){ }}
+    <span style="color:green">续签中</span>
+    {{# } else { }}
+    <span style="color:red">未开启</span>
+    {{# } }}
+    </script>
+
+    <script src="css/layui/layui.js" charset="utf-8"></script>
+    <script src="js/lay-config.js?v=1.0.4" charset="utf-8"></script>
+    <script src="js/jquery-3.6.3/jquery-3.6.3.min.js"></script>
+    <script src="js/common.js" charset="utf-8" id="commonjs" page="index"></script>
+    <script>
+        layui.use(['form', 'layer', 'table'], function () {
+            var $ = layui.jquery,
+                layer = layui.layer,
+                form = layui.form,
+                table = layui.table;
+
+            // 开始配置
+            $('#config-btn').click(function () {
+                var index = layer.open({
+                    title: '配置AppID和应用秘钥',
+                    type: 2,
+                    shade: 0.2,
+                    maxmin:true,
+                    shadeClose: true,
+                    area: ['80%', '80%'],
+                    content: 'config.html',
+                });
+                $(window).on("resize", function () {
+                    layer.full(index);
+                });
+                return false;
+            });
+
+            // 监听搜索操作
+            form.on('submit(data-search-btn)', function (data) {
+                //执行搜索重载
+                table.reload('currentTableId', {
+                    page: {
+                        curr: 1
+                    }
+                    , where: data.field
+                }, 'data');
+
+                return false;
+            });
+
+            // 域名列表
+            table.render({
+                elem: '#currentTableId',
+                url: window.host + '/api/domain-list',
+                method: 'post',
+                headers: {},
+                toolbar: '#appToolBar',
+                defaultToolbar: ['filter', 'exports', 'print'],
+                cols: [[
+                    {type: "checkbox", width: 50},
+                    {field: 'host', width: 150, title: '域名', sort: true},
+                    {field: 'end_time', width: 140, title: '失效时间'},
+                    {field: 'open_status', width: 140, title: '续签开启状态', templet: '#formatEndTime'},
+                    {field: 'sign_status_title', width: 140, title: '续签进度'},
+                    {field: 'txt_dir', minWidth: 200, title: 'TXT验证文件目录'},
+                    {field: 'ssl_certificate', title: '证书完整路径(pem文件)', width: 250},
+                    {field: 'ssl_certificate_key', title: '证书完整路径(key文件)', width: 250},
+                    {title: '操作', minWidth: 150, toolbar: '#currentTableBar', align: "center"}
+                ]],
+                limits: [10, 15, 20, 25, 50, 100],
+                limit: 10,
+                page: true,
+                skin: 'line',
+                request: {
+                    pageName: 'page',
+                    limitName: 'pagesize'
+                },
+                response: {
+                    statusCode: 10000
+                },
+                parseData: function (res) {
+                    // 若检查到服务端值不是10000, 则跳转登录
+                    if (res.code !== 10000) {
+                        return false;
+                    }
+                    return {
+                        'code': res.code,
+                        'msg': res.msg,
+                        'count': res.resultObject.count,
+                        'data': res.resultObject.list
+                    }
+                },
+                done: function (r, curr, cnt) {
+                    if (r.code !== 10000) {
+                        return false;
+                    }
+                }
+            });
+
+            /**
+             * toolbar监听事件
+             */
+            table.on('toolbar(currentTableFilter)', function (obj) {
+                if (obj.event === 'add') {  // 监听添加操作
+                    var index = layer.open({
+                        title: '添加自动续签域名',
+                        type: 2,
+                        shade: 0.2,
+                        maxmin:true,
+                        shadeClose: true,
+                        area: ['80%', '80%'],
+                        content: 'domain-add.html',
+                    });
+                    $(window).on("resize", function () {
+                        layer.full(index);
+                    });
+                } else if (obj.event === 'open') {  // 监听删除操作
+                    let checkStatus = table.checkStatus('currentTableId');
+                    let data = checkStatus.data;
+                    let openList = [];
+                    $.each(data, function (k, v) {
+                        openList[k] = v;
+                    });
+                    layer.confirm('是否确认关闭续签？', function (index) {
+                        post('/api/domain-batch-open', {list: JSON.stringify(openList)}, function (r) {
+                            if (r.code !== 10000) {
+                                layer.msg(r.msg);
+                                return false;
+                            }
+                            layer.msg('开启成功!', function () {
+                                window.location.reload();
+                            });
+                            return true;
+                        });
+                    });
+                } else if (obj.event === 'close') {  // 监听删除操作
+                    let checkStatus = table.checkStatus('currentTableId');
+                    let data = checkStatus.data;
+                    let closeList = [];
+                    $.each(data, function (k, v) {
+                        closeList[k] = v;
+                    });
+                    layer.confirm('是否确认关闭续签？', function (index) {
+                        post('/api/domain-batch-close', {list: JSON.stringify(closeList)}, function (r) {
+                            if (r.code !== 10000) {
+                                layer.msg(r.msg);
+                                return false;
+                            }
+                            layer.msg('关闭成功!', function () {
+                                window.location.reload();
+                            });
+                            return true;
+                        });
+                    });
+                } else if (obj.event === 'syslog') {
+                    var index = layer.open({
+                        title: '系统日志',
+                        type: 2,
+                        shade: 0.2,
+                        maxmin:true,
+                        shadeClose: true,
+                        area: ['80%', '740px'],
+                        content: 'sys-log.html',
+                        btnAlign: 'c',
+                        closeBtn: 1,
+                        btn: ['刷新', '关闭'],
+                        yes: function (index, layero) {
+                            var iframeWindow = window['layui-layer-iframe' + index];
+                            if (iframeWindow) {
+                                // 刷新iframe内容
+                                iframeWindow.location.reload();
+                            }
+                        },
+                        btn2: function (index, layero) {
+                            layer.close(index);
+                        }
+                    });
+                    $(window).on("resize", function () {
+                        layer.full(index);
+                    });
+                }
+            });
+
+            // 行数据操作
+            table.on('tool(currentTableFilter)', function (obj) {
+                var data = obj.data;
+                lineData = JSON.stringify(data);
+                if (obj.event === 'edit') {
+                    var index = layer.open({
+                        title: '修改自动续签域名',
+                        type: 2,
+                        shade: 0.2,
+                        maxmin:true,
+                        shadeClose: true,
+                        area: ['80%', '80%'],
+                        content: '/domain-edit.html',
+                    });
+                    $(window).on("resize", function () {
+                        layer.full(index);
+                    });
+                    return false;
+                } else if (obj.event === 'close') {
+                    layer.confirm('是否确认关闭续签？', function (index) {
+                        post('/api/domain-close', data, function (r) {
+                            if (r.code !== 10000) {
+                                layer.msg(r.msg);
+                                return false;
+                            }
+                            layer.msg('关闭成功!', function () {
+                                window.location.reload();
+                            });
+                            return true;
+                        });
+                    });
+                }
+            });
+
+        });
+    </script>
+</body>
+</html>

@@ -1,0 +1,113 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>配置AppID和应用秘钥</title>
+  <meta name="renderer" content="webkit">
+  <meta http-equiv="X-UA-Compatible" content="IE=edge,chrome=1">
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1">
+  <link rel="stylesheet" href="css/layui/css/layui.css" media="all">
+  <link rel="stylesheet" href="css/public.css" media="all">
+  <style>
+    body {
+      background-color: #ffffff;
+    }
+    .layuimini-form > .layui-form-item > .layui-form-label {
+      width: 160px !important;
+    }
+    .layuimini-form > .layui-form-item > .layui-input-block {
+      margin-left: 10px !important;
+    }
+    .layui-form-item .layui-form-checkbox {
+      margin-top: 4px;
+      margin-left: 14px;
+    }
+    .ip {
+      display: none;
+    }
+    .layui-form-item {
+      margin-bottom: 15px;
+      clear: both;
+      display: inline-flex;
+      width: 100%;
+    }
+    .layui-form-label {
+      float: left;
+      display: block;
+      font-weight: 400;
+      line-height: 20px;
+      text-align: right;
+      padding: 9px 15px;
+    }
+    .layui-input-block {
+      min-height: 16px;
+      width: 100%;
+      margin-left: 0;
+    }
+  </style>
+</head>
+<body>
+<div class="layui-form layuimini-form">
+  <div class="layui-form-item">
+    <label class="layui-form-label required">AppId</label>
+    <div class="layui-input-block">
+      <input type="text" id="app_id" name="app_id" lay-verify="required" lay-reqtext="AppId不能为空" placeholder="请输入AppId" value="" class="layui-input">
+      <tip>登录<a href="https://web.qzssl.com" target="_blank" style="color:blue;text-decoration: underline;">求知SSL证书平台</a>获取</tip>
+    </div>
+  </div>
+  <div class="layui-form-item">
+    <label class="layui-form-label required">应用秘钥</label>
+    <div class="layui-input-block">
+      <input type="text" id="app_token" name="app_token" lay-verify="required" lay-reqtext="应用秘钥不能为空" placeholder="请输入应用秘钥" value="" class="layui-input">
+      <tip>登录<a href="https://web.qzssl.com" target="_blank" style="color:blue;text-decoration: underline;">求知SSL证书平台</a>获取</tip>
+    </div>
+  </div>
+  <div class="layui-form-item">
+    <label class="layui-form-label">&nbsp;</label>
+    <div class="layui-input-block">
+      <button class="layui-btn layui-btn-normal" lay-submit lay-filter="saveBtn">确认保存</button>
+    </div>
+  </div>
+</div>
+<script src="css/layui/layui.js" charset="utf-8"></script>
+<script src="js/jquery-3.6.3/jquery-3.6.3.min.js"></script>
+<script src="js/common.js" charset="utf-8" id="commonjs" page="domain-add"></script>
+<script>
+  layui.use(['form'], function () {
+    var form = layui.form,
+            layer = layui.layer,
+            $ = layui.$;
+
+    //监听提交
+    form.on('submit(saveBtn)', function (data) {
+      var that = $(this);
+      that.attr('disabled', true);
+      post('/api/config', data.field, function (r) {
+        if (r.code !== 10000) {
+          layer.msg(r.msg);
+          that.attr('disabled', false);
+          return false;
+        }
+        layer.msg('配置成功!', function () {
+          window.parent.location.reload();
+        });
+        return true;
+      });
+    });
+
+    // 回显appid和token
+    post('/api/config-info', {}, function (r) {
+      if (r.code !== 10000) {
+        layer.msg(r.msg);
+        return false;
+      }
+      console.log(r.resultObject);
+      $('#app_id').val(r.resultObject.app_id);
+      $('#app_token').val(r.resultObject.app_token);
+      return true;
+    });
+
+  });
+</script>
+</body>
+</html>

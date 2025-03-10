@@ -1,0 +1,83 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>系统日志</title>
+  <meta name="renderer" content="webkit">
+  <meta http-equiv="X-UA-Compatible" content="IE=edge,chrome=1">
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1">
+  <link rel="stylesheet" href="css/layui/css/layui.css" media="all">
+  <link rel="stylesheet" href="css/public.css" media="all">
+  <style>
+    body {
+      background-color: #ffffff;
+    }
+    .layuimini-form > .layui-form-item > .layui-form-label {
+      width: 160px !important;
+    }
+    .layuimini-form > .layui-form-item > .layui-input-block {
+      margin-left: 10px !important;
+    }
+    .layui-form-item .layui-form-checkbox {
+      margin-top: 4px;
+      margin-left: 14px;
+    }
+  </style>
+</head>
+<body style="background-color: #000000;">
+<div class="layui-form layuimini-form" style="border-radius: 10px;">
+  <div class="layui-form-item">
+    <div  class="layui-inline" style="margin-right: 5px;width: 100%;">
+      <div class="layui-input-inline" style="width: 100%;height: 600px;overflow-y: auto" id="system-log">
+      </div>
+    </div>
+  </div>
+</div>
+<script src="css/layui/layui.js" charset="utf-8"></script>
+<script src="js/jquery-3.6.3/jquery-3.6.3.min.js"></script>
+<script src="js/common.js" charset="utf-8" id="commonjs" page="domain-add"></script>
+<script>
+  layui.use(['form'], function () {
+    var form = layui.form,
+            layer = layui.layer,
+            $ = layui.$;
+
+    /*setInterval(function () {
+      // 显示系统续签错误日志
+      post('/api/sys-log', {}, function (r) {
+        if (r.code !== 10000) {
+          layer.msg(r.msg);
+          return false;
+        }
+        r.resultObject.forEach(function (item) {
+          $('#system-log').append('<span style="color:#ffffff;">' + item.time + ' - ' + item.msg +'</span><br/>')
+        });
+        return true;
+      });
+    }, 1000);*/
+
+    $(document).ready(function () {
+      const ws = new WebSocket('ws://localhost:18890');
+
+      ws.onopen = () => {
+        console.log('已连接至WebSocket服务器');
+      };
+
+      ws.onmessage = (event) => {
+        const logElement = $('#system-log');
+        logElement.append('<span style="color:#ffffff;">' + event.data +'</span><br/>'); // 将接收到的数据追加到页面
+        logElement.scrollTop(logElement[0].scrollHeight + 100);
+      };
+
+      ws.onerror = (error) => {
+        console.error('WebSocket错误:', error);
+      };
+
+      ws.onclose = () => {
+        console.log('与WebSocket服务器的连接已关闭');
+      };
+    })
+  });
+</script>
+</body>
+</html>
