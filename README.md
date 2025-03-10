@@ -23,7 +23,7 @@
 5、解压node执行文件：`unzip bin.zip`  
 6、返回根目录：`cd ../../`  
 7、运行服务：`./run_linux.sh &`  
-如果你的服务器自己安装了 node，也可以直接运行：`node src/resign_server.js &`  
+如果你的服务器自己安装了 node，也可以直接运行：`cd .src/ && node resign_server.js &`  
 
 # 注意事项
 系统运行后，默认占用：`18899` 端口，若不想外网直接访问，可自行做 nginx 反向代理  
