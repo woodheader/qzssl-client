@@ -29,5 +29,8 @@ location /qzssl-client/ {
 }
 ```
 
-# 界面示例
+# 系统界面
 ![Xnip2025-03-09_01-54-17](https://github.com/user-attachments/assets/7c02df39-7b69-4231-8058-48df031153a3)
+
+# 开源协议
+请遵循 GPL3.0 协议，如需商用，请访问 QzSSL.com 联系商务人员授权！ 
