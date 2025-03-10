@@ -57,7 +57,12 @@
     }, 1000);*/
 
     $(document).ready(function () {
-      const ws = new WebSocket('ws://'+location.hostname+location.pathname);
+      let pathName = location.pathname.substring(0, pathname.lastIndexOf('/')) || '/';
+      let url = 'ws://'+location.hostname+pathName;
+      if (location.protocol === 'https:') {
+        url = 'wss://'+location.hostname+pathName;
+      }
+      const ws = new WebSocket(url);
 
       ws.onopen = () => {
         console.log('已连接至WebSocket服务器');
