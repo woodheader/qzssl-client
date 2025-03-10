@@ -26,10 +26,15 @@
 如果你的服务器自己安装了 node，也可以直接运行：`cd .src/ && node resign_server.js &`  
 
 # 注意事项
-系统运行后，默认占用：`18899` 端口，若不想外网直接访问，可自行做 nginx 反向代理  
+系统运行后，默认占用：`18899` 端口，若不想外网直接 `ip+端口` 访问，可使用独立二级域名
 ```
-location /qzssl-client/ {
-    proxy_pass http://localhost:18899/;
+server {
+    	listen 80;
+    	# 填写你自己的二级域名
+    	server_name  ssl.wdqz.cc;
+        location / {
+            proxy_pass http://localhost:18899/;
+        }
 }
 ```
 
