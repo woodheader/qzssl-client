@@ -75,6 +75,9 @@ function getHostListFromQz()
             myutil.writeLog('从求知平台同步域名列表失败，原因：' + response.data.msg);
             return false;
         }
+        if (!fs.existsSync(domainDataPath)) {
+            fs.writeFileSync(domainDataPath, '', 'utf8');
+        }
         let domainData = fs.readFileSync(domainDataPath, 'utf8');
         if (util.isNullOrUndefined(domainData) || domainData === '') {
             domainData = '[]';
