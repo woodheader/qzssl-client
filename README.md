@@ -19,7 +19,10 @@
 1、拉取代码：`git pull git@github.com:woodheader/qzssl-client.git`  
 2、进入项目：`cd qzssl-client`  
 3、设置执行权限：`chmod +x run_linux.sh`  
-4、运行服务：`./run_linux.sh`  
+4、进入bin目录：`cd bin/linux/`  
+5、解压node执行文件：`unzip bin.zip`  
+6、返回根目录：`cd ../../`  
+7、运行服务：`./run_linux.sh &`  
 如果你的服务器自己安装了 node，也可以直接运行：`node src/resign_server.js &`  
 
 # 注意事项
