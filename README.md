@@ -26,7 +26,9 @@
 如果你的服务器自己安装了 node，也可以直接运行：`cd .src/ && node resign_server.js &`  
 
 # 注意事项
-系统运行后，默认占用：`18899` 端口，若不想外网直接 `ip+端口` 访问，可使用独立二级域名
+系统运行后，默认占用：`18899` 端口，若不想外网直接 `ip+端口` 访问，可使用独立二级域名  
+二级域名访问，建议监听80端口，也就是通过 `http` 协议访问  
+有动手能力的，可自行修改 `WebSocket` 部分代码，添加你自己的证书，以支持 `wss`
 ```
 server {
     	listen 80;
@@ -34,8 +36,19 @@ server {
     	server_name  ssl.wdqz.cc;
         location / {
             proxy_pass http://localhost:18899/;
+            proxy_http_version 1.1;
+            proxy_set_header Upgrade $http_upgrade;
+            proxy_set_header Connection "upgrade";
+            proxy_set_header Host $host;
+    
+            # 可选：设置超时时间以避免连接过早关闭
+            proxy_read_timeout 86400s;
+            proxy_send_timeout 86400s;
         }
 }
+
+# 将以上 nginx 配置放入 ssl.wdqz.cc.conf（修改为你自己的域名.conf） 文件中
+# 最后 nginx -s reload 即可
 ```
 
 # 系统界面
