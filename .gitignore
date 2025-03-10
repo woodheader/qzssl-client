@@ -1,3 +1,5 @@
 .idea
 src/cert/*
+!src/cert/
 src/data/*.json
+!src/data/
