@@ -57,7 +57,7 @@
     }, 1000);*/
 
     $(document).ready(function () {
-      let pathName = location.pathname.substring(0, pathname.lastIndexOf('/')) || '/';
+      let pathName = location.pathname.substring(0, location.pathname.lastIndexOf('/')) || '/';
       let url = 'ws://'+location.hostname+pathName;
       if (location.protocol === 'https:') {
         url = 'wss://'+location.hostname+pathName;
