@@ -59,7 +59,7 @@ function getDomainList(domain, page, pagesize)
     if (!fs.existsSync(domainDataPath)) {
         return {
             code: 30000,
-            msg: '数据文件不存在!',
+            msg: '数据文件不存在!(约10分钟左右从QzSSL同步域名数据)',
             resultObject: []
         };
     }
