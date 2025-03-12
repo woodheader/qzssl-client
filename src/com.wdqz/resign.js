@@ -143,7 +143,7 @@ function validateAndCreateOrder()
     });
     if (needResignList.length > 0) {
         myutil.writeLog('需要续签的域名列表：' + needResignList.join(', '));
-        let token = myutils.generateToken();
+        let token = myutil.generateToken();
         needResignList.forEach((host) => {
             const data = JSON.stringify({
                 host: host,
