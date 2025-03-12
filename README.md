@@ -3,7 +3,7 @@
 # 项目说明
 > 本系统为针对 <a href="https://qzssl.com" target="_blank">QzSSL.com</a> 证书平台开发的自动续签客户端。  
 > 凡是从 QzSSL.com 购买了证书，且希望能摆脱一年续签一次的用户，可以下载此工具。  
-> 目前本系统只适配了 Linux 系统
+> 目前本系统只适配了 Linux 系统 + Nginx 服务器
 
 # 系统功能逻辑说明
 1、QzSSl.com 购买证书  
