@@ -134,7 +134,7 @@ function validateAndCreateOrder()
     let oneMonthLater = fns.addMonths(new Date(), 1);
     domainList.forEach((item) => {
         // 开启中且待申请
-        if (item.open_status === 'open' && item.sign_status === '10') {
+        if (item.open_status === 'open' && item.sign_status === 10) {
             let endDate = fns.parseISO(item.end_time);
             if (fns.isAfter(oneMonthLater, endDate) || fns.isEqual(oneMonthLater, endDate)) {
                 needResignList.push(item.host);
@@ -142,6 +142,7 @@ function validateAndCreateOrder()
         }
     });
     if (needResignList.length > 0) {
+        myutil.writeLog('需要续签的域名列表：' + needResignList.join(', '));
         let token = myutils.generateToken();
         needResignList.forEach((host) => {
             const data = JSON.stringify({
@@ -156,6 +157,7 @@ function validateAndCreateOrder()
                     myutil.writeLog('发起续签失败，原因：' + response.data.msg);
                     return false;
                 }
+                myutil.writeLog('发起续签成功：' + JSON.stringify(response));
                 return true;
             });
         })
@@ -188,6 +190,7 @@ function validateAndInstall()
             if (item.sign_status === 15) {
                 const txtFile = item.txt_dir + '/' + item.txt_name;
                 !fs.existsSync(txtFile) && fs.writeFileSync(txtFile, item.txt_content, 'utf8');
+                myutil.writeLog('处于待验证状态的域名：' + item.host + ' ，开始生成对应验证文件：' + txtFile);
             }
             // 已签发状态
             if (item.sign_status === 30) {
@@ -197,38 +200,45 @@ function validateAndInstall()
                     fs.mkdirSync(saveZipDir);
                 }
                 const saveZipFile = saveZipDir + '/' + item.host + '.zip';
+                myutil.writeLog('处于已签发状态的域名：' + item.host + ' ，开始下载证书压缩包：' + item.ssl_download_url + ' ，将储存在：' + saveZipFile);
                 !fs.existsSync(saveZipFile) && myutil.downloadFile(item.ssl_download_url, saveZipFile).then(() => {
                     // 解压文件
                     const zip = new admZip(saveZipFile);
                     zip.extractAllTo(saveZipDir, true);
+                    myutil.writeLog('ZIP压缩包解压成功：' + saveZipFile );
                     // 移动.pem和.key文件到用户设置的目录
                     const pemFile = saveZipDir + '/' + item.host + '/nginx/' + item.host + '.pem';
                     const keyFile = saveZipDir + '/' + item.host + '/nginx/' + item.host + '.key';
                     fs.renameSync(pemFile, item.ssl_certificate);
+                    myutil.writeLog('PEM文件安装成功：' + pemFile );
                     fs.renameSync(keyFile, item.ssl_certificate_key);
+                    myutil.writeLog('KEY文件安装成功：' + keyFile );
                     // 执行 nginx reload
                     childProcess.exec('sudo nginx -s reload', (err, stdout, stderr) => {
                         if (err) {
-                            myutil.writeLog('执行 nginx -s reload 失败，错误内容：' + err);
+                            myutil.writeLog('执行 nginx -s reload 失败，错误内容：' + err + '(' + item.host + ')');
                             // 删除临时生成的证书文件
                             myutil.removeFile(saveZipDir);
                             return false;
                         }
                         if (stderr) {
-                            myutil.writeLog('执行 nginx -s reload 失败，错误内容：' + stderr);
+                            myutil.writeLog('执行 nginx -s reload 失败，错误内容：' + stderr + '(' + item.host + ')');
                             // 删除临时生成的证书文件
                             myutil.removeFile(saveZipDir);
                             return false;
                         }
-                        myutil.writeLog('执行 nginx -s reload 成功！stdout：' + stdout);
+                        myutil.writeLog('执行 nginx -s reload 成功！(' + item.host + ')');
                         // 执行成功后，将当前域名续签状态改为：续签完成
                         item.sign_status = 35;
                         item.sign_status_title = '续签完成';
+                        myutil.writeLog('设置域名续签状态为：' + item.sign_status_title + '(' + item.host + ')');
                     });
                     // 删除临时生成的证书文件
                     myutil.removeFile(saveZipDir);
+                    myutil.writeLog('删除临时生成的证书文件：' + item.sign_status_title + '(' + item.host + ')');
                 }).catch((error) => {
                     console.log('证书文件下载或处理失败：', error);
+                    myutil.writeLog('证书文件下载或处理失败：' + error + '(' + item.host + ')');
                     // 删除临时生成的证书文件目录
                     myutil.removeFile(saveZipDir);
                 })
