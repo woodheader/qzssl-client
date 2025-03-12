@@ -157,7 +157,7 @@ function validateAndCreateOrder()
                     myutil.writeLog('发起续签失败，原因：' + response.data.msg);
                     return false;
                 }
-                myutil.writeLog('发起续签成功：' + JSON.stringify(response));
+                myutil.writeLog('发起续签成功：' + JSON.stringify(response.data));
                 return true;
             });
         })
