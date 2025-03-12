@@ -172,11 +172,13 @@ function validateAndCreateOrder()
  */
 function validateAndInstall()
 {
+    myutil.writeLog('开始安装验证文件或证书文件');
     if (!fs.existsSync(domainDataPath)) {
         fs.writeFileSync(domainDataPath, '', 'utf8');
     }
     let domainJson = fs.readFileSync(domainDataPath, 'utf8');
     if (util.isNullOrUndefined(domainJson) || domainJson === '') {
+        myutil.writeLog('域名数据文件domain.json为空');
         return false;
     }
     if (os.platform() !== 'linux') {
