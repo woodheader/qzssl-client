@@ -22,7 +22,7 @@ var sysLogPath = __dirname + '/../data/log.json';
 var downloadDir = __dirname + '/../cert/';
 
 // 求知平台API-host
-var qzApi = 'https://openapi.wdqz.cc/apidev';
+var qzApi = 'https://openapi.wdqz.cc/api';
 
 // 求知平台API-获取域名列表
 var qzGetHostList = qzApi + '/ssl-client/get-host-list';
