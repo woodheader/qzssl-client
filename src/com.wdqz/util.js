@@ -97,4 +97,25 @@ function removeFile(file)
     }
 }
 
-module.exports = {generateToken, writeLog, downloadFile, removeFile};
+/**
+ * 移动文件
+ */
+function moveFile(source, destination)
+{
+    try {
+        childProcess.exec('sudo mv ' + source + ' ' + destination, (err, stdout, stderr) => {
+            if (err) {
+                writeLog('移动文件失败，错误内容：' + err);
+            }
+            if (stderr) {
+                writeLog('移动文件失败，错误内容：' + stderr);
+            }
+        })
+    } catch (error) {
+        if (error.code === 'EPERM') {
+            writeLog(file + ' 目录或文件没有操作权限：' + error);
+        }
+    }
+}
+
+module.exports = {generateToken, writeLog, downloadFile, removeFile, moveFile};

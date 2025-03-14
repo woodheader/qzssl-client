@@ -211,9 +211,9 @@ function validateAndInstall()
                     // 移动.pem和.key文件到用户设置的目录
                     const pemFile = saveZipDir + '/' + item.host + '/nginx/' + item.host + '.pem';
                     const keyFile = saveZipDir + '/' + item.host + '/nginx/' + item.host + '.key';
-                    fs.renameSync(pemFile, item.ssl_certificate);
+                    myutil.moveFile(pemFile, item.ssl_certificate);
                     myutil.writeLog('PEM文件安装成功：' + pemFile );
-                    fs.renameSync(keyFile, item.ssl_certificate_key);
+                    myutil.moveFile(keyFile, item.ssl_certificate_key);
                     myutil.writeLog('KEY文件安装成功：' + keyFile );
                     // 执行 nginx reload
                     childProcess.exec('sudo nginx -s reload', (err, stdout, stderr) => {
