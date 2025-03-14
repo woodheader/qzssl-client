@@ -203,7 +203,7 @@ function validateAndInstall()
                 }
                 const saveZipFile = saveZipDir + '/' + item.host + '.zip';
                 myutil.writeLog('处于已签发状态的域名：' + item.host + ' ，开始下载证书压缩包：' + item.ssl_download_url + ' ，将储存在：' + saveZipFile);
-                !fs.existsSync(saveZipFile) && myutil.downloadFile(item.ssl_download_url, saveZipFile).then(() => {
+                myutil.downloadFile(item.ssl_download_url, saveZipFile).then(() => {
                     // 解压文件
                     const zip = new admZip(saveZipFile);
                     zip.extractAllTo(saveZipDir, true);
