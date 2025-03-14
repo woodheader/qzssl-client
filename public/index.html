@@ -89,12 +89,26 @@
         </div>
     </div>
 
-    <script type="text/html" id="formatEndTime">
+    <script type="text/html" id="formatOpenStatus">
     {{# if (d.open_status === 'open'){ }}
     <span style="color:green">续签中</span>
     {{# } else { }}
     <span style="color:red">未开启</span>
     {{# } }}
+    </script>
+
+    <script type="text/html" id="formatSignStatus">
+        {{# if (d.sign_status === 15){ }}
+        <span style="color:#e308c8">待验证</span>
+        {{# } else if (d.sign_status === 20){ }}
+        <span style="color:orangered">待签发</span>
+        {{# } else if (d.sign_status === 30){ }}
+        <span style="color:blue">已签发</span>
+        {{# } else if (d.sign_status === 35){ }}
+        <span style="color:green">续签完成</span>
+        {{# } else { }}
+        <span>{{d.sign_status_title}}</span>
+        {{# } }}
     </script>
 
     <script src="css/layui/layui.js" charset="utf-8"></script>
@@ -150,8 +164,8 @@
                     {type: "checkbox", width: 50},
                     {field: 'host', width: 150, title: '域名', sort: true},
                     {field: 'end_time', width: 140, title: '失效时间'},
-                    {field: 'open_status', width: 140, title: '续签开启状态', templet: '#formatEndTime'},
-                    {field: 'sign_status_title', width: 140, title: '续签进度'},
+                    {field: 'open_status', width: 140, title: '续签开启状态', templet: '#formatOpenStatus'},
+                    {field: 'sign_status_title', width: 140, title: '续签进度', templet: '#formatSignStatus'},
                     {field: 'txt_dir', minWidth: 200, title: 'TXT验证文件目录'},
                     {field: 'ssl_certificate', title: '证书完整路径(pem文件)', width: 250},
                     {field: 'ssl_certificate_key', title: '证书完整路径(key文件)', width: 250},
