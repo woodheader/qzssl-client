@@ -118,4 +118,30 @@ function moveFile(source, destination)
     }
 }
 
-module.exports = {generateToken, writeLog, downloadFile, removeFile, moveFile};
+/**
+ * 更新domain.json中某个域名的状态
+ */
+function updateDomainStatus(host, sign_status, sign_status_title)
+{
+    const domainPath = __dirname + '/../data/domain.json';
+    // 检查文件是否存在，不存在就创建
+    if (!fs.existsSync(domainPath)) {
+        return false;
+    }
+    let domainJson  = fs.readFileSync(domainPath, 'utf8');
+    let domainList = JSON.parse(domainJson);
+    if (domainList.length <= 0) {
+        return false;
+    }
+    let newDomainList = [];
+    domainList.forEach(item => {
+        if (item.host === host) {
+            item.sign_status = sign_status;
+            item.sign_status_title = sign_status_title;
+        }
+        newDomainList.push(item);
+    });
+    fs.writeFileSync(domainPath, JSON.stringify(newDomainList), 'utf8');
+}
+
+module.exports = {generateToken, writeLog, downloadFile, removeFile, moveFile, updateDomainStatus};

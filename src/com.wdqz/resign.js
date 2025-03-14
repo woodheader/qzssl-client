@@ -231,8 +231,7 @@ function validateAndInstall()
                         }
                         myutil.writeLog('执行 nginx -s reload 成功！(' + item.host + ')');
                         // 执行成功后，将当前域名续签状态改为：续签完成
-                        item.sign_status = 35;
-                        item.sign_status_title = '续签完成';
+                        myutil.updateDomainStatus(item.host, 35, '续签完成');
                         myutil.writeLog('设置域名续签状态为：' + item.sign_status_title + '(' + item.host + ')');
                     });
                     // 删除临时生成的证书文件
@@ -247,7 +246,6 @@ function validateAndInstall()
             }
         }
     });
-    fs.writeFileSync(domainDataPath, JSON.stringify(domainList), 'utf8');
 }
 
 module.exports = {startJob};
