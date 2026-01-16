@@ -225,7 +225,7 @@
                     $.each(data, function (k, v) {
                         openList[k] = v;
                     });
-                    layer.confirm('是否确认关闭续签？', function (index) {
+                    layer.confirm('是否确认开启续签？', function (index) {
                         post('/api/domain-batch-open', {list: JSON.stringify(openList)}, function (r) {
                             if (r.code !== 10000) {
                                 layer.msg(r.msg);
