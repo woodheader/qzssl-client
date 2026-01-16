@@ -17,7 +17,7 @@
 在 QzSSL.com 有大量证书的客户，可极大降低维护成本，降低运维成本
 
 # 安装步骤
-1、拉取代码：`git pull git@github.com:woodheader/qzssl-client.git`  
+1、拉取代码：`git clone git@github.com:woodheader/qzssl-client.git`  
 2、进入项目：`cd qzssl-client`  
 3、设置执行权限：`chmod +x run_linux.sh`  
 4、进入bin目录：`cd bin/linux/`  
