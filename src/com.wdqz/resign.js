@@ -30,6 +30,22 @@ var qzGetHostList = qzApi + '/ssl-client/get-host-list';
 // 求知平台API-提交开启续签域名，生成续签订单
 var qzCreateResignOrder = qzApi + '/ssl-client/validate-and-create-order';
 
+function newJobId(prefix) {
+    return prefix + '-' + date.format(new Date(), 'YYYYMMDDHHmmss') + '-' + process.pid;
+}
+
+function logInfo(jobId, tag, msg) {
+    myutil.writeLog('[' + jobId + '][' + tag + '] ' + msg);
+}
+
+function logOk(jobId, tag, msg) {
+    myutil.writeLog('[' + jobId + '][' + tag + '][OK] ' + msg);
+}
+
+function logErr(jobId, tag, msg) {
+    myutil.writeLog('[' + jobId + '][' + tag + '][ERR] ' + msg);
+}
+
 /**
  * 任务入口
  * - 定时从求知平台同步证书订单数据到客户端，每隔10分钟执行一次（域名、验证文件内容、证书文件内容、续签状态）
@@ -41,17 +57,14 @@ var qzCreateResignOrder = qzApi + '/ssl-client/validate-and-create-order';
 function startJob(httpServer)
 {
     schedule.scheduleJob('*/10 * * * *', function () {
-        myutil.writeLog('1、开始从求知平台同步域名数据');
         getHostListFromQz();
     });
 
     schedule.scheduleJob('0 1 * * *', function () {
-        myutil.writeLog('2、将开启续签且即将一个月内过期的域名生成续签订单');
         validateAndCreateOrder();
     });
 
     schedule.scheduleJob('*/15 * * * *', function () {
-        myutil.writeLog('3、将待验证或待签发状态的txt验证文件和证书文件安装至指定目录');
         validateAndInstall();
     });
 
@@ -64,9 +77,12 @@ function startJob(httpServer)
  */
 function getHostListFromQz()
 {
+    const jobId = newJobId('SYNC');
+    const startedAt = Date.now();
+    logInfo(jobId, 'SYNC', '开始同步域名列表');
     const token = myutil.generateToken();
     if (!token) {
-        myutil.writeLog('同步域名列表失败：未配置 AppId/AppToken');
+        logErr(jobId, 'SYNC', '未配置 AppId/AppToken，跳过同步');
         return false;
     }
     const headers = {
@@ -75,9 +91,10 @@ function getHostListFromQz()
     };
     axios.post(qzGetHostList, {}, {headers}).then((response) => {
         if (response.data.code !== 10000) {
-            myutil.writeLog('从求知平台同步域名列表失败，原因：' + response.data.msg);
+            logErr(jobId, 'SYNC', '平台返回失败：' + response.data.msg);
             return false;
         }
+        const list = Array.isArray(response.data.resultObject) ? response.data.resultObject : [];
         if (!fs.existsSync(domainDataPath)) {
             fs.writeFileSync(domainDataPath, '[]', 'utf8');
         }
@@ -93,7 +110,7 @@ function getHostListFromQz()
             curDomainList = [];
         }
         if (!Array.isArray(curDomainList)) curDomainList = [];
-        response.data.resultObject.forEach((itemNew) => {
+        list.forEach((itemNew) => {
             let initData = {
                 host: itemNew.host,
                 end_time: itemNew.end_time,
@@ -125,8 +142,9 @@ function getHostListFromQz()
             newDomainList.push(initData);
         });
         fs.writeFileSync(domainDataPath, JSON.stringify(newDomainList), 'utf8');
+        logOk(jobId, 'SYNC', '同步完成：共 ' + list.length + ' 个域名，已写入 domain.json，耗时 ' + (Date.now() - startedAt) + 'ms');
     }).catch((error) => {
-        myutil.writeLog('从求知平台同步域名列表异常：' + (error && error.message ? error.message : String(error)));
+        logErr(jobId, 'SYNC', '同步异常：' + (error && error.message ? error.message : String(error)));
     })
 }
 
@@ -136,11 +154,16 @@ function getHostListFromQz()
  */
 function validateAndCreateOrder()
 {
+    const jobId = newJobId('RENEW');
+    const startedAt = Date.now();
+    logInfo(jobId, 'RENEW', '开始检测即将过期域名并发起续签');
     if (!fs.existsSync(domainDataPath)) {
+        logErr(jobId, 'RENEW', 'domain.json 不存在，跳过续签检测');
         return false;
     }
     let domainJson = fs.readFileSync(domainDataPath, 'utf8');
     if (util.isNullOrUndefined(domainJson) || domainJson === '') {
+        logErr(jobId, 'RENEW', 'domain.json 为空，跳过续签检测');
         return false;
     }
     let needResignList = [];
@@ -148,10 +171,13 @@ function validateAndCreateOrder()
     try {
         domainList = JSON.parse(domainJson);
     } catch (e) {
-        myutil.writeLog('domain.json 解析失败，跳过续签检测：' + e.message);
+        logErr(jobId, 'RENEW', 'domain.json 解析失败，跳过续签检测：' + e.message);
         return false;
     }
-    if (!Array.isArray(domainList)) return false;
+    if (!Array.isArray(domainList)) {
+        logErr(jobId, 'RENEW', 'domain.json 格式不正确，跳过续签检测');
+        return false;
+    }
     // 当前时间+1个月
     let oneMonthLater = fns.addMonths(new Date(), 1);
     domainList.forEach((item) => {
@@ -164,10 +190,10 @@ function validateAndCreateOrder()
         }
     });
     if (needResignList.length > 0) {
-        myutil.writeLog('需要续签的域名列表：' + needResignList.join(', '));
+        logInfo(jobId, 'RENEW', '符合续签条件域名：' + needResignList.length + ' 个（' + needResignList.join(', ') + '）');
         let token = myutil.generateToken();
         if (!token) {
-            myutil.writeLog('发起续签失败：未配置 AppId/AppToken');
+            logErr(jobId, 'RENEW', '未配置 AppId/AppToken，跳过发起续签');
             return false;
         }
         const headers = {
@@ -179,17 +205,23 @@ function validateAndCreateOrder()
             const data = { host };
             reqs.push(axios.post(qzCreateResignOrder, data, { headers }).then((response) => {
                 if (response.data.code !== 10000) {
-                    myutil.writeLog('发起续签失败，原因：' + response.data.msg);
+                    logErr(jobId, 'RENEW:' + host, '发起续签失败：' + response.data.msg);
                     return false;
                 }
-                myutil.writeLog('发起续签成功：' + JSON.stringify(response.data));
+                logOk(jobId, 'RENEW:' + host, '发起续签成功');
                 return true;
             }).catch((error) => {
-                myutil.writeLog('发起续签异常：' + (error && error.message ? error.message : String(error)) + '(' + host + ')');
+                logErr(jobId, 'RENEW:' + host, '发起续签异常：' + (error && error.message ? error.message : String(error)));
                 return false;
             }));
         })
-        Promise.allSettled(reqs).then(() => {});
+        Promise.allSettled(reqs).then((results) => {
+            const okCount = results.filter((r) => r.status === 'fulfilled' && r.value === true).length;
+            const failCount = results.length - okCount;
+            logInfo(jobId, 'RENEW', '续签请求完成：成功 ' + okCount + '，失败 ' + failCount + '，耗时 ' + (Date.now() - startedAt) + 'ms');
+        });
+    } else {
+        logOk(jobId, 'RENEW', '无符合续签条件域名，耗时 ' + (Date.now() - startedAt) + 'ms');
     }
 }
 
@@ -201,88 +233,102 @@ function validateAndCreateOrder()
  */
 function validateAndInstall()
 {
-    myutil.writeLog('开始安装验证文件或证书文件');
+    const jobId = newJobId('INSTALL');
+    const startedAt = Date.now();
+    logInfo(jobId, 'INSTALL', '开始检查并安装验证文件/证书文件');
     if (!fs.existsSync(domainDataPath)) {
         fs.writeFileSync(domainDataPath, '', 'utf8');
     }
     let domainJson = fs.readFileSync(domainDataPath, 'utf8');
     if (util.isNullOrUndefined(domainJson) || domainJson === '') {
-        myutil.writeLog('域名数据文件domain.json为空');
+        logErr(jobId, 'INSTALL', 'domain.json 为空，跳过安装');
         return false;
     }
     if (os.platform() !== 'linux') {
-        myutil.writeLog('安装证书文件失败，当前仅支持 *nux 系统');
+        logErr(jobId, 'INSTALL', '当前系统非 Linux，跳过安装');
         return false;
     }
     let domainList;
     try {
         domainList = JSON.parse(domainJson);
     } catch (e) {
-        myutil.writeLog('domain.json 解析失败，跳过安装：' + e.message);
+        logErr(jobId, 'INSTALL', 'domain.json 解析失败，跳过安装：' + e.message);
         return false;
     }
-    if (!Array.isArray(domainList)) return false;
+    if (!Array.isArray(domainList)) {
+        logErr(jobId, 'INSTALL', 'domain.json 格式不正确，跳过安装');
+        return false;
+    }
+    const openList = domainList.filter((d) => d && d.open_status === 'open');
+    logInfo(jobId, 'INSTALL', '已开启自动续签域名：' + openList.length + ' 个');
     domainList.forEach((item) => {
         if (item.open_status === 'open') {
             // 待验证状态
             if (item.sign_status === 15) {
+                const stepStart = Date.now();
                 const txtFile = item.txt_dir + '/' + item.txt_name;
                 try {
+                    if (!item.txt_dir || !item.txt_name) {
+                        logErr(jobId, 'INSTALL:' + item.host, '验证文件信息缺失（txt_dir/txt_name），跳过写入');
+                        return;
+                    }
                     fs.writeFileSync(txtFile, item.txt_content, 'utf8');
                 } catch (e) {
-                    myutil.writeLog('生成验证文件失败：' + e.message + '(' + item.host + ')');
+                    logErr(jobId, 'INSTALL:' + item.host, '写入验证文件失败：' + e.message + '（' + txtFile + '）');
                     return;
                 }
-                myutil.writeLog('处于待验证状态的域名：' + item.host + ' ，开始生成对应验证文件：' + txtFile);
+                logOk(jobId, 'INSTALL:' + item.host, '写入验证文件成功：' + txtFile + '，耗时 ' + (Date.now() - stepStart) + 'ms');
             }
             // 已签发状态
             if (item.sign_status === 30) {
+                const stepStart = Date.now();
                 // 下载zip文件
                 const saveZipDir = downloadDir + item.host;
                 if (!fs.existsSync(saveZipDir)) {
                     fs.mkdirSync(saveZipDir);
                 }
                 const saveZipFile = saveZipDir + '/' + item.host + '.zip';
-                myutil.writeLog('处于已签发状态的域名：' + item.host + ' ，开始下载证书压缩包：' + item.ssl_download_url + ' ，将储存在：' + saveZipFile);
+                logInfo(jobId, 'INSTALL:' + item.host, '开始下载证书压缩包：' + item.ssl_download_url);
                 myutil.downloadFile(item.ssl_download_url, saveZipFile).then(() => {
+                    logOk(jobId, 'INSTALL:' + item.host, '证书压缩包下载完成：' + saveZipFile);
                     // 解压文件
                     const zip = new admZip(saveZipFile);
                     zip.extractAllTo(saveZipDir, true);
-                    myutil.writeLog('ZIP压缩包解压成功：' + saveZipFile );
+                    logOk(jobId, 'INSTALL:' + item.host, '证书压缩包解压完成');
                     // 移动.pem和.key文件到用户设置的目录
                     const pemFile = saveZipDir + '/' + item.host + '/nginx/' + item.host + '.pem';
                     const keyFile = saveZipDir + '/' + item.host + '/nginx/' + item.host + '.key';
                     myutil.moveFile(pemFile, item.ssl_certificate);
-                    myutil.writeLog('PEM文件安装成功：' + pemFile );
+                    logInfo(jobId, 'INSTALL:' + item.host, 'PEM 文件移动：' + pemFile + ' -> ' + item.ssl_certificate);
                     myutil.moveFile(keyFile, item.ssl_certificate_key);
-                    myutil.writeLog('KEY文件安装成功：' + keyFile );
+                    logInfo(jobId, 'INSTALL:' + item.host, 'KEY 文件移动：' + keyFile + ' -> ' + item.ssl_certificate_key);
                     // 执行 nginx reload
                     childProcess.exec('sudo nginx -s reload', (err, stdout, stderr) => {
                         if (err) {
-                            myutil.writeLog('执行 nginx -s reload 失败，错误内容：' + err + '(' + item.host + ')');
+                            logErr(jobId, 'INSTALL:' + item.host, 'nginx reload 失败：' + err);
                             myutil.removeFile(saveZipDir);
                             return;
                         }
                         if (stderr) {
-                            myutil.writeLog('执行 nginx -s reload 失败，错误内容：' + stderr + '(' + item.host + ')');
+                            logErr(jobId, 'INSTALL:' + item.host, 'nginx reload 失败：' + stderr);
                             myutil.removeFile(saveZipDir);
                             return;
                         }
-                        myutil.writeLog('执行 nginx -s reload 成功！(' + item.host + ')');
+                        logOk(jobId, 'INSTALL:' + item.host, 'nginx reload 成功');
                         // 执行成功后，将当前域名续签状态改为：续签完成
                         myutil.updateDomainStatus(item.host, 35, '续签完成');
-                        myutil.writeLog('设置域名续签状态为：续签完成(' + item.host + ')');
+                        logOk(jobId, 'INSTALL:' + item.host, '已设置续签状态：续签完成，耗时 ' + (Date.now() - stepStart) + 'ms');
                         myutil.removeFile(saveZipDir);
                     });
                 }).catch((error) => {
-                    console.log('证书文件下载或处理失败：', error);
-                    myutil.writeLog('证书文件下载或处理失败：' + error + '(' + item.host + ')');
+                    logErr(jobId, 'INSTALL:' + item.host, '证书下载或处理失败：' + (error && error.message ? error.message : String(error)));
                     // 删除临时生成的证书文件目录
                     myutil.removeFile(saveZipDir);
                 })
             }
         }
     });
+    logInfo(jobId, 'INSTALL', '本轮检查已完成（异步下载/安装可能仍在进行），耗时 ' + (Date.now() - startedAt) + 'ms');
 }
 
 module.exports = {startJob};
