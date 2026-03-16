@@ -115,7 +115,7 @@ function saveDomain(host, txt_dir, ssl_certificate, ssl_certificate_key, saveTyp
             resultObject: []
         };
     }
-    if (util.isNullOrUndefined(ssl_certificate) || ssl_certificate_key === '') {
+    if (util.isNullOrUndefined(ssl_certificate) || ssl_certificate === '') {
         return {
             code: 30000,
             msg: '证书pem文件完整路径不能为空!',
@@ -129,33 +129,32 @@ function saveDomain(host, txt_dir, ssl_certificate, ssl_certificate_key, saveTyp
             resultObject: []
         };
     }
-    // 检查文件是否存在，不存在就创建
     if (!fs.existsSync(domainDataPath)) {
-        fs.writeFileSync(domainDataPath, '', 'utf8');
+        fs.writeFileSync(domainDataPath, '[]', 'utf8');
     }
-    // 读取文件
     let data = fs.readFileSync(domainDataPath, 'utf8');
-    if (util.isNullOrUndefined(data) || data === '') {
-        data = '[]';
+    if (util.isNullOrUndefined(data) || data === '') data = '[]';
+    let domainList;
+    try {
+        domainList = JSON.parse(data);
+    } catch (e) {
+        domainList = [];
     }
-    let domainList = JSON.parse(data);
+    if (!Array.isArray(domainList)) domainList = [];
     let hasDomain = false;
     let itemIndex = -1;
-    domainList.forEach((item, index) => {
-        // domain存在，则更新其他数据
-        if (item.host === host) {
-            // 如果是添加域名，这里退出循环
-            if (saveType === 'add' || saveType === 'remove' || saveType === 'close' || saveType === 'open') {
-                itemIndex = index
-                hasDomain = true;
-                return false;
-            }
+    for (let index = 0; index < domainList.length; index++) {
+        const item = domainList[index];
+        if (item.host !== host) continue;
+        itemIndex = index;
+        hasDomain = true;
+        if (saveType !== 'add' && saveType !== 'remove' && saveType !== 'close' && saveType !== 'open') {
             item.txt_dir = txt_dir;
             item.ssl_certificate = ssl_certificate;
             item.ssl_certificate_key = ssl_certificate_key;
-            hasDomain = true;
         }
-    });
+        break;
+    }
     // 如果是添加域名，且域名存在，这里抛出错误
     if (hasDomain && saveType === 'add') {
         return {
@@ -194,7 +193,7 @@ function saveDomain(host, txt_dir, ssl_certificate, ssl_certificate_key, saveTyp
     }
     if (!hasDomain && saveType === 'add') {
         let newData = {
-            host: domain,
+            host: host,
             open_status: 'open',
             txt_dir: txt_dir,
             ssl_certificate: ssl_certificate,
@@ -228,9 +227,17 @@ function configInfo()
     // 读取数据文件
     let configInfo = fs.readFileSync(configPath, 'utf8');
     if (configInfo === null || configInfo === '') {
-        configInfo = '[]';
+        configInfo = '{}';
     }
-    let configData = JSON.parse(configInfo);
+    let configData;
+    try {
+        configData = JSON.parse(configInfo);
+    } catch (e) {
+        configData = {};
+    }
+    if (configData === null || typeof configData !== 'object' || Array.isArray(configData)) {
+        configData = {};
+    }
     return {
         code: 10000,
         msg: 'success',
@@ -245,7 +252,7 @@ function configInfo()
  */
 function getSystemLog()
 {
-// 检查文件是否存在
+    // 检查文件是否存在
     if (!fs.existsSync(sysLogPath)) {
         return {
             code: 30000,
@@ -255,10 +262,14 @@ function getSystemLog()
     }
     // 读取数据文件
     let logInfo = fs.readFileSync(sysLogPath, 'utf8');
-    if (logInfo === null || logInfo === '') {
-        logInfo = '[]';
-    }
-    let logData = JSON.parse(logInfo);
+    if (logInfo === null || logInfo === '') logInfo = '';
+    const lines = logInfo.split('\n').map((s) => s.trim()).filter(Boolean);
+    const logData = lines.map((line) => {
+        const sep = ' - ';
+        const idx = line.indexOf(sep);
+        if (idx === -1) return { time: '', msg: line };
+        return { time: line.slice(0, idx), msg: line.slice(idx + sep.length) };
+    });
     return {
         code: 10000,
         msg: 'success',
@@ -273,23 +284,104 @@ function getSystemLog()
  */
 function wsReadSyslog(httpServer)
 {
+    if (!fs.existsSync(sysLogPath)) {
+        fs.writeFileSync(sysLogPath, '', 'utf8');
+    }
+    const LIMITS = {
+        maxInitialLines: 500,
+        maxInitialBytes: 64 * 1024,
+        maxPushLines: 200,
+        maxPushBytes: 16 * 1024,
+        maxBufferedAmount: 1024 * 1024,
+        maxLinesPerFlush: 2000,
+    };
+
     // WebSocket 服务器配置
     const wss = new WebSocket.Server({ server: httpServer });
 
     // 存储所有连接的客户端
     const clients = new Set();
 
-    // 广播消息给所有连接的客户端
-    function broadcast(message) {
-        clients.forEach((client) => {
-            if (client.readyState === WebSocket.OPEN) {
-                client.send(message);
+    function safeSend(ws, message) {
+        if (!ws || ws.readyState !== WebSocket.OPEN) return;
+        if (typeof ws.bufferedAmount === 'number' && ws.bufferedAmount > LIMITS.maxBufferedAmount) return;
+        ws.send(message);
+    }
+
+    function cutByUtf8Bytes(str, maxBytes) {
+        if (Buffer.byteLength(str, 'utf8') <= maxBytes) return [str];
+        const out = [];
+        let start = 0;
+        while (start < str.length) {
+            let end = start;
+            let bytes = 0;
+            while (end < str.length) {
+                const ch = str[end];
+                const chBytes = Buffer.byteLength(ch, 'utf8');
+                if (bytes + chBytes > maxBytes) break;
+                bytes += chBytes;
+                end++;
             }
-        });
+            if (end === start) end = start + 1;
+            out.push(str.slice(start, end));
+            start = end;
+        }
+        return out;
+    }
+
+    function chunkLines(lines, maxLines, maxBytes) {
+        const chunks = [];
+        let cur = [];
+        let curBytes = 0;
+
+        const pushCur = () => {
+            if (cur.length === 0) return;
+            chunks.push(cur);
+            cur = [];
+            curBytes = 0;
+        };
+
+        for (const line of lines) {
+            const parts = cutByUtf8Bytes(String(line), maxBytes);
+            for (const part of parts) {
+                const b = Buffer.byteLength(part, 'utf8');
+                if (cur.length + 1 > maxLines || curBytes + b > maxBytes) {
+                    pushCur();
+                }
+                cur.push(part);
+                curBytes += b;
+            }
+        }
+        pushCur();
+        return chunks;
+    }
+
+    function sendLinesToWs(ws, type, lines) {
+        const chunks = chunkLines(lines, LIMITS.maxPushLines, LIMITS.maxPushBytes);
+        for (const chunk of chunks) {
+            safeSend(ws, JSON.stringify({ type, lines: chunk }));
+        }
+    }
+
+    function broadcastLines(type, lines) {
+        const chunks = chunkLines(lines, LIMITS.maxPushLines, LIMITS.maxPushBytes);
+        for (const chunk of chunks) {
+            const message = JSON.stringify({ type, lines: chunk });
+            clients.forEach((client) => safeSend(client, message));
+        }
+    }
+
+    function shrinkLinesByBytesFromStart(lines, maxBytes) {
+        let bytes = 0;
+        for (let i = lines.length - 1; i >= 0; i--) {
+            bytes += Buffer.byteLength(lines[i], 'utf8');
+            if (bytes > maxBytes) return lines.slice(i + 1);
+        }
+        return lines;
     }
 
     // 读取日志文件并发送给客户端
-    function sendInitialLog() {
+    function sendInitialLog(targetWs) {
         lockfile.lock(sysLogPath + '.lock', { wait: 1000, retries: 5 }, (err) => {
             if (err) {
                 console.error('获取文件锁时出错:', err);
@@ -305,7 +397,13 @@ function wsReadSyslog(httpServer)
                     console.error('读取日志文件时出错:', err);
                     return;
                 }
-                broadcast(data.split('\n').join('<br/>'));
+                const all = String(data || '');
+                let lines = all.split('\n').filter((l) => l !== '');
+                if (lines.length > LIMITS.maxInitialLines) {
+                    lines = lines.slice(-LIMITS.maxInitialLines);
+                }
+                lines = shrinkLinesByBytesFromStart(lines, LIMITS.maxInitialBytes);
+                sendLinesToWs(targetWs, 'snapshot', lines);
             });
         });
     }
@@ -328,6 +426,40 @@ function wsReadSyslog(httpServer)
         lastSize = stats.size;
     });
 
+    let leftoverLine = '';
+    let pendingText = '';
+    let flushTimer = null;
+
+    function flushPending() {
+        if (!pendingText) return;
+        let text = leftoverLine + pendingText;
+        pendingText = '';
+
+        const endsWithNewline = text.endsWith('\n');
+        let parts = text.split('\n');
+        if (!endsWithNewline) {
+            leftoverLine = parts.pop() || '';
+        } else {
+            leftoverLine = '';
+        }
+        parts = parts.filter((l) => l !== '');
+        if (parts.length === 0) return;
+
+        if (parts.length > LIMITS.maxLinesPerFlush) {
+            parts = parts.slice(-LIMITS.maxLinesPerFlush);
+            parts.unshift('... 日志过多，已截断 ...');
+        }
+        broadcastLines('append', parts);
+    }
+
+    function scheduleFlush() {
+        if (flushTimer) return;
+        flushTimer = setTimeout(() => {
+            flushTimer = null;
+            flushPending();
+        }, 120);
+    }
+
     // 当文件内容发生变化时，发送新增内容给客户端
     watcher.on('change', (path) => {
         setTimeout(() => {
@@ -347,6 +479,15 @@ function wsReadSyslog(httpServer)
                         return;
                     }
                     const currentSize = stats.size;
+                    if (currentSize < lastSize) {
+                        lastSize = 0;
+                        leftoverLine = '';
+                        pendingText = '';
+                    }
+                    if (currentSize === lastSize) {
+                        lockfile.unlock(sysLogPath + '.lock', () => {});
+                        return;
+                    }
                     fs.open(path, 'r', (err, fd) => {
                         if (err) {
                             lockfile.unlock(sysLogPath + '.lock', (unlockErr) => {
@@ -357,8 +498,9 @@ function wsReadSyslog(httpServer)
                             console.error('打开文件时出错:', err);
                             return;
                         }
-                        const buffer = Buffer.alloc(currentSize - lastSize);
-                        fs.read(fd, buffer, 0, currentSize - lastSize, lastSize, (err, bytesRead) => {
+                        const bytesToRead = currentSize - lastSize;
+                        const buffer = Buffer.alloc(bytesToRead);
+                        fs.read(fd, buffer, 0, bytesToRead, lastSize, (err, bytesRead) => {
                             fs.close(fd, () => {});
                             lockfile.unlock(sysLogPath + '.lock', (unlockErr) => {
                                 if (unlockErr) {
@@ -370,7 +512,8 @@ function wsReadSyslog(httpServer)
                                 return;
                             }
                             const newContent = buffer.toString('utf8', 0, bytesRead);
-                            broadcast(newContent.split('\n').join('<br/>').replace('<br/><br/>', '<br/>'));
+                            pendingText += newContent;
+                            scheduleFlush();
                             lastSize = currentSize;
                         });
                     });
@@ -382,15 +525,53 @@ function wsReadSyslog(httpServer)
     // 处理 WebSocket 连接
     wss.on('connection', (ws) => {
         clients.add(ws);
+        ws.isAlive = true;
+        ws.on('pong', () => {
+            ws.isAlive = true;
+        });
         // 发送初始日志内容
-        sendInitialLog();
+        sendInitialLog(ws);
 
         // 处理客户端断开连接
         ws.on('close', () => {
             clients.delete(ws);
         });
+        ws.on('error', () => {
+            clients.delete(ws);
+        });
     });
 
+    const pingInterval = setInterval(() => {
+        clients.forEach((ws) => {
+            if (ws.isAlive === false) {
+                try {
+                    ws.terminate();
+                } catch (e) {}
+                clients.delete(ws);
+                return;
+            }
+            ws.isAlive = false;
+            try {
+                ws.ping();
+            } catch (e) {
+                try {
+                    ws.terminate();
+                } catch (e2) {}
+                clients.delete(ws);
+            }
+        });
+    }, 30000);
+
+    wss.on('close', () => {
+        clearInterval(pingInterval);
+        if (flushTimer) {
+            clearTimeout(flushTimer);
+            flushTimer = null;
+        }
+        try {
+            watcher.close();
+        } catch (e) {}
+    });
 }
 
 module.exports = {saveConfig, getDomainList, saveDomain, configInfo, getSystemLog, wsReadSyslog};

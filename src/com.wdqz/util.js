@@ -21,6 +21,11 @@ function getTimestamp() {
  * @param appToken
  */
 function generateToken() {
+    const cfg = config.getConfig();
+    if (!cfg || typeof cfg !== 'object' || Array.isArray(cfg) || !cfg.app_id || !cfg.app_token) {
+        writeLog('未配置 app_id/app_token，无法生成鉴权 token');
+        return '';
+    }
     // 示例 payload
     const payload = {
         iss:  'https://qzssl.com/', // 固定值
@@ -29,11 +34,11 @@ function generateToken() {
         nbf:  getTimestamp(),     // 在此时间之前，该jwt都是不可用
         exp:  getTimestamp() + 7200,     // jwt 有效期 2 小时
         data:  {
-            app_id: config.getConfig().app_id,
+            app_id: cfg.app_id,
         },
     };
     // 密钥
-    const secret = config.getConfig().app_token;
+    const secret = cfg.app_token;
     // 生成 JWT
     return jwt.sign(payload, secret);
 }
@@ -81,15 +86,19 @@ async function downloadFile(url, saveToFile)
 function removeFile(file)
 {
     try {
-        //fs.unlinkSync(file);
-        childProcess.exec('sudo rm -rf ' + file, (err, stdout, stderr) => {
-            if (err) {
-                writeLog('删除文件失败，错误内容：' + err);
+        if (!file || typeof file !== 'string') return;
+        const child = childProcess.spawn('sudo', ['rm', '-rf', file], {
+            stdio: ['ignore', 'pipe', 'pipe'],
+        });
+        let stderr = '';
+        child.stderr.on('data', (d) => {
+            stderr += d.toString();
+        });
+        child.on('close', (code) => {
+            if (code !== 0) {
+                writeLog('删除文件失败，错误内容：' + (stderr || ('exitCode=' + code)));
             }
-            if (stderr) {
-                writeLog('删除文件失败，错误内容：' + stderr);
-            }
-        })
+        });
     } catch (error) {
         if (error.code === 'EPERM') {
             writeLog(file + ' 目录或文件没有操作权限：' + error);
@@ -103,17 +112,22 @@ function removeFile(file)
 function moveFile(source, destination)
 {
     try {
-        childProcess.exec('sudo mv ' + source + ' ' + destination, (err, stdout, stderr) => {
-            if (err) {
-                writeLog('移动文件失败，错误内容：' + err);
+        if (!source || !destination || typeof source !== 'string' || typeof destination !== 'string') return;
+        const child = childProcess.spawn('sudo', ['mv', source, destination], {
+            stdio: ['ignore', 'pipe', 'pipe'],
+        });
+        let stderr = '';
+        child.stderr.on('data', (d) => {
+            stderr += d.toString();
+        });
+        child.on('close', (code) => {
+            if (code !== 0) {
+                writeLog('移动文件失败，错误内容：' + (stderr || ('exitCode=' + code)));
             }
-            if (stderr) {
-                writeLog('移动文件失败，错误内容：' + stderr);
-            }
-        })
+        });
     } catch (error) {
         if (error.code === 'EPERM') {
-            writeLog(file + ' 目录或文件没有操作权限：' + error);
+            writeLog(source + ' 目录或文件没有操作权限：' + error);
         }
     }
 }

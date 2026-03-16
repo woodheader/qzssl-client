@@ -57,34 +57,79 @@
     }, 1000);*/
 
     $(document).ready(function () {
-      let pathName = location.pathname.substring(0, location.pathname.lastIndexOf('/')) || '/';
-      pathName = pathName.replace('/', '');
-      let url = 'ws://'+location.hostname+pathName;
-      if (location.protocol === 'https:') {
-        url = 'wss://'+location.hostname+pathName;
+      const proto = location.protocol === 'https:' ? 'wss' : 'ws';
+      const port = location.port ? (':' + location.port) : '';
+      const url = proto + '://' + location.hostname + port;
+      let ws;
+      let reconnectDelay = 500;
+      let reconnectTimer;
+      const logEl = document.getElementById('system-log');
+      const MAX_LINES = 5000;
+      const PRUNE_TRIGGER = 5200;
+
+      function connect() {
+        if (reconnectTimer) clearTimeout(reconnectTimer);
+        ws = new WebSocket(url);
+
+        ws.onopen = () => {
+          reconnectDelay = 500;
+          console.log('已连接至WebSocket服务器');
+        };
+
+        ws.onmessage = (event) => {
+          const nearBottom = (logEl.scrollTop + logEl.clientHeight) >= (logEl.scrollHeight - 40);
+
+          let payload;
+          try {
+            payload = JSON.parse(event.data);
+          } catch (e) {
+            payload = null;
+          }
+
+          if (payload && payload.lines && Array.isArray(payload.lines)) {
+            if (payload.type === 'snapshot') {
+              logEl.innerHTML = '';
+            }
+
+            const frag = document.createDocumentFragment();
+            payload.lines.forEach((line) => {
+              const div = document.createElement('div');
+              div.style.color = '#ffffff';
+              div.textContent = String(line);
+              frag.appendChild(div);
+            });
+            logEl.appendChild(frag);
+
+            if (logEl.childElementCount > PRUNE_TRIGGER) {
+              const excess = logEl.childElementCount - MAX_LINES;
+              for (let i = 0; i < excess; i++) {
+                if (!logEl.firstElementChild) break;
+                logEl.removeChild(logEl.firstElementChild);
+              }
+            }
+          } else {
+            const div = document.createElement('div');
+            div.style.color = '#ffffff';
+            div.innerHTML = String(event.data);
+            logEl.appendChild(div);
+          }
+
+          if (nearBottom) {
+            logEl.scrollTop = logEl.scrollHeight + 100;
+          }
+        };
+
+        ws.onerror = (error) => {
+          console.error('WebSocket错误:', error);
+        };
+
+        ws.onclose = () => {
+          reconnectTimer = setTimeout(connect, reconnectDelay);
+          reconnectDelay = Math.min(reconnectDelay * 2, 10000);
+        };
       }
-      if (location.port !== undefined && location.port !== '') {
-        url += ':' + location.port;
-      }
-      const ws = new WebSocket(url);
 
-      ws.onopen = () => {
-        console.log('已连接至WebSocket服务器');
-      };
-
-      ws.onmessage = (event) => {
-        const logElement = $('#system-log');
-        logElement.append('<span style="color:#ffffff;">' + event.data +'</span><br/>'); // 将接收到的数据追加到页面
-        logElement.scrollTop(logElement[0].scrollHeight + 100);
-      };
-
-      ws.onerror = (error) => {
-        console.error('WebSocket错误:', error);
-      };
-
-      ws.onclose = () => {
-        console.log('与WebSocket服务器的连接已关闭');
-      };
+      connect();
     })
   });
 </script>

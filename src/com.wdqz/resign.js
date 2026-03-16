@@ -64,23 +64,35 @@ function startJob(httpServer)
  */
 function getHostListFromQz()
 {
-    const data = queryString.stringify({
-    });
+    const token = myutil.generateToken();
+    if (!token) {
+        myutil.writeLog('同步域名列表失败：未配置 AppId/AppToken');
+        return false;
+    }
     const headers = {
         'Content-Type': 'application/json',
-        'Authorization': myutil.generateToken(),
+        'Authorization': token,
     };
-    axios.post(qzGetHostList, data, {headers}).then((response) => {
+    axios.post(qzGetHostList, {}, {headers}).then((response) => {
         if (response.data.code !== 10000) {
             myutil.writeLog('从求知平台同步域名列表失败，原因：' + response.data.msg);
             return false;
+        }
+        if (!fs.existsSync(domainDataPath)) {
+            fs.writeFileSync(domainDataPath, '[]', 'utf8');
         }
         let domainData = fs.readFileSync(domainDataPath, 'utf8');
         if (util.isNullOrUndefined(domainData) || domainData === '') {
             domainData = '[]';
         }
         let newDomainList = [];
-        let curDomainList = JSON.parse(domainData);
+        let curDomainList;
+        try {
+            curDomainList = JSON.parse(domainData);
+        } catch (e) {
+            curDomainList = [];
+        }
+        if (!Array.isArray(curDomainList)) curDomainList = [];
         response.data.resultObject.forEach((itemNew) => {
             let initData = {
                 host: itemNew.host,
@@ -114,7 +126,7 @@ function getHostListFromQz()
         });
         fs.writeFileSync(domainDataPath, JSON.stringify(newDomainList), 'utf8');
     }).catch((error) => {
-        console.log(error);
+        myutil.writeLog('从求知平台同步域名列表异常：' + (error && error.message ? error.message : String(error)));
     })
 }
 
@@ -124,12 +136,22 @@ function getHostListFromQz()
  */
 function validateAndCreateOrder()
 {
+    if (!fs.existsSync(domainDataPath)) {
+        return false;
+    }
     let domainJson = fs.readFileSync(domainDataPath, 'utf8');
     if (util.isNullOrUndefined(domainJson) || domainJson === '') {
         return false;
     }
     let needResignList = [];
-    let domainList = JSON.parse(domainJson);
+    let domainList;
+    try {
+        domainList = JSON.parse(domainJson);
+    } catch (e) {
+        myutil.writeLog('domain.json 解析失败，跳过续签检测：' + e.message);
+        return false;
+    }
+    if (!Array.isArray(domainList)) return false;
     // 当前时间+1个月
     let oneMonthLater = fns.addMonths(new Date(), 1);
     domainList.forEach((item) => {
@@ -144,23 +166,30 @@ function validateAndCreateOrder()
     if (needResignList.length > 0) {
         myutil.writeLog('需要续签的域名列表：' + needResignList.join(', '));
         let token = myutil.generateToken();
+        if (!token) {
+            myutil.writeLog('发起续签失败：未配置 AppId/AppToken');
+            return false;
+        }
+        const headers = {
+            'Content-Type': 'application/json',
+            'Authorization': token,
+        };
+        const reqs = [];
         needResignList.forEach((host) => {
-            const data = JSON.stringify({
-                host: host,
-            });
-            const headers = {
-                'Content-Type': 'application/json',
-                'Authorization': token,
-            };
-            axios.post(qzCreateResignOrder, data, {headers}).then((response) => {
+            const data = { host };
+            reqs.push(axios.post(qzCreateResignOrder, data, { headers }).then((response) => {
                 if (response.data.code !== 10000) {
                     myutil.writeLog('发起续签失败，原因：' + response.data.msg);
                     return false;
                 }
                 myutil.writeLog('发起续签成功：' + JSON.stringify(response.data));
                 return true;
-            });
+            }).catch((error) => {
+                myutil.writeLog('发起续签异常：' + (error && error.message ? error.message : String(error)) + '(' + host + ')');
+                return false;
+            }));
         })
+        Promise.allSettled(reqs).then(() => {});
     }
 }
 
@@ -185,13 +214,25 @@ function validateAndInstall()
         myutil.writeLog('安装证书文件失败，当前仅支持 *nux 系统');
         return false;
     }
-    let domainList = JSON.parse(domainJson);
+    let domainList;
+    try {
+        domainList = JSON.parse(domainJson);
+    } catch (e) {
+        myutil.writeLog('domain.json 解析失败，跳过安装：' + e.message);
+        return false;
+    }
+    if (!Array.isArray(domainList)) return false;
     domainList.forEach((item) => {
         if (item.open_status === 'open') {
             // 待验证状态
             if (item.sign_status === 15) {
                 const txtFile = item.txt_dir + '/' + item.txt_name;
-                !fs.existsSync(txtFile) && fs.writeFileSync(txtFile, item.txt_content, 'utf8');
+                try {
+                    fs.writeFileSync(txtFile, item.txt_content, 'utf8');
+                } catch (e) {
+                    myutil.writeLog('生成验证文件失败：' + e.message + '(' + item.host + ')');
+                    return;
+                }
                 myutil.writeLog('处于待验证状态的域名：' + item.host + ' ，开始生成对应验证文件：' + txtFile);
             }
             // 已签发状态
@@ -219,24 +260,20 @@ function validateAndInstall()
                     childProcess.exec('sudo nginx -s reload', (err, stdout, stderr) => {
                         if (err) {
                             myutil.writeLog('执行 nginx -s reload 失败，错误内容：' + err + '(' + item.host + ')');
-                            // 删除临时生成的证书文件
                             myutil.removeFile(saveZipDir);
-                            return false;
+                            return;
                         }
                         if (stderr) {
                             myutil.writeLog('执行 nginx -s reload 失败，错误内容：' + stderr + '(' + item.host + ')');
-                            // 删除临时生成的证书文件
                             myutil.removeFile(saveZipDir);
-                            return false;
+                            return;
                         }
                         myutil.writeLog('执行 nginx -s reload 成功！(' + item.host + ')');
                         // 执行成功后，将当前域名续签状态改为：续签完成
                         myutil.updateDomainStatus(item.host, 35, '续签完成');
-                        myutil.writeLog('设置域名续签状态为：' + item.sign_status_title + '(' + item.host + ')');
+                        myutil.writeLog('设置域名续签状态为：续签完成(' + item.host + ')');
+                        myutil.removeFile(saveZipDir);
                     });
-                    // 删除临时生成的证书文件
-                    myutil.removeFile(saveZipDir);
-                    myutil.writeLog('删除临时生成的证书文件：' + item.sign_status_title + '(' + item.host + ')');
                 }).catch((error) => {
                     console.log('证书文件下载或处理失败：', error);
                     myutil.writeLog('证书文件下载或处理失败：' + error + '(' + item.host + ')');

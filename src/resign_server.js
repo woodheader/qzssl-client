@@ -3,6 +3,7 @@ var bodyParser = require('body-parser');
 var client = require('./com.wdqz/client');
 var resign = require('./com.wdqz/resign');
 var http = require('http');
+var path = require('path');
 
 // express 应用
 var app = express();
@@ -11,7 +12,7 @@ var app = express();
 var httpServer = http.createServer(app);
 
 // 静态文件目录
-app.use(express.static('../public'));
+app.use(express.static(path.join(__dirname, '../public')));
 
 // 创建 application/x-www-form-urlencoded 编码解析
 let urlencodedParser = bodyParser.urlencoded({ extended: false });
