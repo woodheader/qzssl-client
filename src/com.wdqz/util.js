@@ -61,6 +61,10 @@ function writeLog(errorMsg) {
             try {
                 fs.renameSync(sysLogPath, rotated);
                 fs.writeFileSync(sysLogPath, '', 'utf8');
+                try {
+                    fs.unlinkSync(sysLogPath + '.lock');
+                } catch (e2) {
+                }
             } catch (e) {
             }
         }

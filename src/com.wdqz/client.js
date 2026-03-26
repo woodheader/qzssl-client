@@ -2,7 +2,6 @@ var util = require('util');
 var fs = require('fs');
 var WebSocket = require('ws');
 const chokidar = require('chokidar');
-const lockfile = require('lockfile');
 
 // 配置文件
 var configPath = __dirname + '/../data/config.json';
@@ -382,40 +381,29 @@ function wsReadSyslog(httpServer)
 
     // 读取日志文件并发送给客户端
     function sendInitialLog(targetWs) {
-        lockfile.lock(sysLogPath + '.lock', { wait: 1000, retries: 5 }, (err) => {
-            if (err) {
-                console.error('获取文件锁时出错:', err);
+        fs.stat(sysLogPath, (e1, st) => {
+            if (e1 || !st || !st.isFile()) {
                 return;
             }
-            fs.stat(sysLogPath, (e1, st) => {
-                if (e1 || !st || !st.isFile()) {
-                    lockfile.unlock(sysLogPath + '.lock', () => {});
-                    return;
-                }
-                const size = st.size;
-                const readBytes = Math.min(size, LIMITS.maxInitialBytes);
-                const offset = size - readBytes;
-                fs.open(sysLogPath, 'r', (e2, fd) => {
-                    if (e2) {
-                        lockfile.unlock(sysLogPath + '.lock', () => {});
-                        return;
+            const size = st.size;
+            const readBytes = Math.min(size, LIMITS.maxInitialBytes);
+            const offset = size - readBytes;
+            fs.open(sysLogPath, 'r', (e2, fd) => {
+                if (e2) return;
+                const buf = Buffer.alloc(readBytes);
+                fs.read(fd, buf, 0, readBytes, offset, (e3, bytesRead) => {
+                    fs.close(fd, () => {});
+                    if (e3) return;
+                    let text = buf.toString('utf8', 0, bytesRead);
+                    if (offset > 0) {
+                        const p = text.indexOf('\n');
+                        if (p !== -1) text = text.slice(p + 1);
                     }
-                    const buf = Buffer.alloc(readBytes);
-                    fs.read(fd, buf, 0, readBytes, offset, (e3, bytesRead) => {
-                        fs.close(fd, () => {});
-                        lockfile.unlock(sysLogPath + '.lock', () => {});
-                        if (e3) return;
-                        let text = buf.toString('utf8', 0, bytesRead);
-                        if (offset > 0) {
-                            const p = text.indexOf('\n');
-                            if (p !== -1) text = text.slice(p + 1);
-                        }
-                        let lines = text.split('\n').filter((l) => l !== '');
-                        if (lines.length > LIMITS.maxInitialLines) {
-                            lines = lines.slice(-LIMITS.maxInitialLines);
-                        }
-                        sendLinesToWs(targetWs, 'snapshot', lines);
-                    });
+                    let lines = text.split('\n').filter((l) => l !== '');
+                    if (lines.length > LIMITS.maxInitialLines) {
+                        lines = lines.slice(-LIMITS.maxInitialLines);
+                    }
+                    sendLinesToWs(targetWs, 'snapshot', lines);
                 });
             });
         });
@@ -476,59 +464,37 @@ function wsReadSyslog(httpServer)
     // 当文件内容发生变化时，发送新增内容给客户端
     watcher.on('change', (path) => {
         setTimeout(() => {
-            lockfile.lock(sysLogPath + '.lock', { wait: 1000, retries: 5 }, (err) => {
+            fs.stat(path, (err, stats) => {
                 if (err) {
-                    console.error('获取文件锁时出错:', err);
+                    console.error('获取文件状态时出错:', err);
                     return;
                 }
-                fs.stat(path, (err, stats) => {
+                const currentSize = stats.size;
+                if (currentSize < lastSize) {
+                    lastSize = 0;
+                    leftoverLine = '';
+                    pendingText = '';
+                }
+                if (currentSize === lastSize) {
+                    return;
+                }
+                fs.open(path, 'r', (err, fd) => {
                     if (err) {
-                        lockfile.unlock(sysLogPath + '.lock', (unlockErr) => {
-                            if (unlockErr) {
-                                console.error('释放文件锁时出错:', unlockErr);
-                            }
-                        });
-                        console.error('获取文件状态时出错:', err);
+                        console.error('打开文件时出错:', err);
                         return;
                     }
-                    const currentSize = stats.size;
-                    if (currentSize < lastSize) {
-                        lastSize = 0;
-                        leftoverLine = '';
-                        pendingText = '';
-                    }
-                    if (currentSize === lastSize) {
-                        lockfile.unlock(sysLogPath + '.lock', () => {});
-                        return;
-                    }
-                    fs.open(path, 'r', (err, fd) => {
+                    const bytesToRead = currentSize - lastSize;
+                    const buffer = Buffer.alloc(bytesToRead);
+                    fs.read(fd, buffer, 0, bytesToRead, lastSize, (err, bytesRead) => {
+                        fs.close(fd, () => {});
                         if (err) {
-                            lockfile.unlock(sysLogPath + '.lock', (unlockErr) => {
-                                if (unlockErr) {
-                                    console.error('释放文件锁时出错:', unlockErr);
-                                }
-                            });
-                            console.error('打开文件时出错:', err);
+                            console.error('读取文件时出错:', err);
                             return;
                         }
-                        const bytesToRead = currentSize - lastSize;
-                        const buffer = Buffer.alloc(bytesToRead);
-                        fs.read(fd, buffer, 0, bytesToRead, lastSize, (err, bytesRead) => {
-                            fs.close(fd, () => {});
-                            lockfile.unlock(sysLogPath + '.lock', (unlockErr) => {
-                                if (unlockErr) {
-                                    console.error('释放文件锁时出错:', unlockErr);
-                                }
-                            });
-                            if (err) {
-                                console.error('读取文件时出错:', err);
-                                return;
-                            }
-                            const newContent = buffer.toString('utf8', 0, bytesRead);
-                            pendingText += newContent;
-                            scheduleFlush();
-                            lastSize = currentSize;
-                        });
+                        const newContent = buffer.toString('utf8', 0, bytesRead);
+                        pendingText += newContent;
+                        scheduleFlush();
+                        lastSize = currentSize;
                     });
                 });
             });
