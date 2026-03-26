@@ -48,13 +48,26 @@ function generateToken() {
  */
 function writeLog(errorMsg) {
     const sysLogPath = __dirname + '/../data/log.json';
-    // 检查文件是否存在，不存在就创建
     if (!fs.existsSync(sysLogPath)) {
         fs.writeFileSync(sysLogPath, '', 'utf8');
     }
+    try {
+        const st = fs.statSync(sysLogPath);
+        const max = 5 * 1024 * 1024;
+        if (st.size >= max) {
+            const ts = date.format(new Date(), 'YYYYMMDD-HHmmss');
+            const base = sysLogPath.replace(/\.json$/,'');
+            const rotated = base + '-' + ts + '.log';
+            try {
+                fs.renameSync(sysLogPath, rotated);
+                fs.writeFileSync(sysLogPath, '', 'utf8');
+            } catch (e) {
+            }
+        }
+    } catch (e) {
+    }
     const curTime = date.format(new Date(), 'YYYY-MM-DD HH:mm:ss');
     let data = curTime + ' - ' + errorMsg + "\n";
-    // 写文件
     fs.appendFileSync(sysLogPath, data, 'utf8');
 }
 

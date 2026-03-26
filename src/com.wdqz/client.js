@@ -289,7 +289,7 @@ function wsReadSyslog(httpServer)
     }
     const LIMITS = {
         maxInitialLines: 500,
-        maxInitialBytes: 64 * 1024,
+        maxInitialBytes: 128 * 1024,
         maxPushLines: 200,
         maxPushBytes: 16 * 1024,
         maxBufferedAmount: 1024 * 1024,
@@ -387,23 +387,36 @@ function wsReadSyslog(httpServer)
                 console.error('获取文件锁时出错:', err);
                 return;
             }
-            fs.readFile(sysLogPath, 'utf8', (err, data) => {
-                lockfile.unlock(sysLogPath + '.lock', (unlockErr) => {
-                    if (unlockErr) {
-                        console.error('释放文件锁时出错:', unlockErr);
-                    }
-                });
-                if (err) {
-                    console.error('读取日志文件时出错:', err);
+            fs.stat(sysLogPath, (e1, st) => {
+                if (e1 || !st || !st.isFile()) {
+                    lockfile.unlock(sysLogPath + '.lock', () => {});
                     return;
                 }
-                const all = String(data || '');
-                let lines = all.split('\n').filter((l) => l !== '');
-                if (lines.length > LIMITS.maxInitialLines) {
-                    lines = lines.slice(-LIMITS.maxInitialLines);
-                }
-                lines = shrinkLinesByBytesFromStart(lines, LIMITS.maxInitialBytes);
-                sendLinesToWs(targetWs, 'snapshot', lines);
+                const size = st.size;
+                const readBytes = Math.min(size, LIMITS.maxInitialBytes);
+                const offset = size - readBytes;
+                fs.open(sysLogPath, 'r', (e2, fd) => {
+                    if (e2) {
+                        lockfile.unlock(sysLogPath + '.lock', () => {});
+                        return;
+                    }
+                    const buf = Buffer.alloc(readBytes);
+                    fs.read(fd, buf, 0, readBytes, offset, (e3, bytesRead) => {
+                        fs.close(fd, () => {});
+                        lockfile.unlock(sysLogPath + '.lock', () => {});
+                        if (e3) return;
+                        let text = buf.toString('utf8', 0, bytesRead);
+                        if (offset > 0) {
+                            const p = text.indexOf('\n');
+                            if (p !== -1) text = text.slice(p + 1);
+                        }
+                        let lines = text.split('\n').filter((l) => l !== '');
+                        if (lines.length > LIMITS.maxInitialLines) {
+                            lines = lines.slice(-LIMITS.maxInitialLines);
+                        }
+                        sendLinesToWs(targetWs, 'snapshot', lines);
+                    });
+                });
             });
         });
     }
