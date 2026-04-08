@@ -11,6 +11,7 @@ const childProcess = require('child_process');
 const os = require('os');
 const dns = require("node:dns");
 const date = require("silly-datetime");
+const path = require('path');
 
 // 域名数据文件
 var domainDataPath = __dirname + '/../data/domain.json';
@@ -132,8 +133,8 @@ function getHostListFromQz()
                     initData.txt_dir = itemCur.txt_dir;
                     initData.ssl_certificate = itemCur.ssl_certificate;
                     initData.ssl_certificate_key = itemCur.ssl_certificate_key;
-                    // 当前续签状态是：续签完成时，不做覆盖
-                    if (itemCur.sign_status === 35) {
+                    // 本地状态是“续签完成”时：仅当平台返回“待申请”(无续签订单)才保留本地完成态；否则以平台状态为准
+                    if (itemCur.sign_status === 35 && itemNew.sign_status === 10) {
                         initData.sign_status = itemCur.sign_status;
                         initData.sign_status_title = itemCur.sign_status_title;
                     }
@@ -266,18 +267,24 @@ function validateAndInstall()
             // 待验证状态
             if (item.sign_status === 15) {
                 const stepStart = Date.now();
-                const txtFile = item.txt_dir + '/' + item.txt_name;
                 try {
                     if (!item.txt_dir || !item.txt_name) {
                         logErr(jobId, 'INSTALL:' + item.host, '验证文件信息缺失（txt_dir/txt_name），跳过写入');
                         return;
                     }
+                    const txtDirNormalized = path.normalize(item.txt_dir);
+                    const wellKnownSuffix = path.join('.well-known', 'pki-validation');
+                    const targetDir = txtDirNormalized.includes(wellKnownSuffix)
+                        ? txtDirNormalized
+                        : path.join(txtDirNormalized, wellKnownSuffix);
+                    const txtFile = path.join(targetDir, item.txt_name);
+                    fs.mkdirSync(path.dirname(txtFile), { recursive: true });
                     fs.writeFileSync(txtFile, item.txt_content, 'utf8');
+                    logOk(jobId, 'INSTALL:' + item.host, '写入验证文件成功：' + txtFile + '，耗时 ' + (Date.now() - stepStart) + 'ms');
                 } catch (e) {
-                    logErr(jobId, 'INSTALL:' + item.host, '写入验证文件失败：' + e.message + '（' + txtFile + '）');
+                    logErr(jobId, 'INSTALL:' + item.host, '写入验证文件失败：' + e.message);
                     return;
                 }
-                logOk(jobId, 'INSTALL:' + item.host, '写入验证文件成功：' + txtFile + '，耗时 ' + (Date.now() - stepStart) + 'ms');
             }
             // 已签发状态
             if (item.sign_status === 30) {
