@@ -6,6 +6,19 @@ const util = require("util");
 const axios = require("axios");
 const childProcess = require('child_process');
 
+function atomicWriteFileSync(filePath, content) {
+    const tmp = filePath + '.tmp-' + process.pid + '-' + Date.now();
+    try {
+        fs.writeFileSync(tmp, content, 'utf8');
+        fs.renameSync(tmp, filePath);
+    } finally {
+        try {
+            if (fs.existsSync(tmp)) fs.unlinkSync(tmp);
+        } catch (e) {
+        }
+    }
+}
+
 /**
  * 当前时间时间戳
  * @returns {number}
@@ -160,7 +173,16 @@ function updateDomainStatus(host, sign_status, sign_status_title)
         return false;
     }
     let domainJson  = fs.readFileSync(domainPath, 'utf8');
-    let domainList = JSON.parse(domainJson);
+    let domainList;
+    try {
+        domainList = JSON.parse(domainJson);
+    } catch (e) {
+        writeLog('domain.json 解析失败，无法更新状态：' + e.message);
+        return false;
+    }
+    if (!Array.isArray(domainList)) {
+        return false;
+    }
     if (domainList.length <= 0) {
         return false;
     }
@@ -172,7 +194,7 @@ function updateDomainStatus(host, sign_status, sign_status_title)
         }
         newDomainList.push(item);
     });
-    fs.writeFileSync(domainPath, JSON.stringify(newDomainList), 'utf8');
+    atomicWriteFileSync(domainPath, JSON.stringify(newDomainList));
 }
 
-module.exports = {generateToken, writeLog, downloadFile, removeFile, moveFile, updateDomainStatus};
+module.exports = {generateToken, writeLog, downloadFile, removeFile, moveFile, updateDomainStatus, atomicWriteFileSync};

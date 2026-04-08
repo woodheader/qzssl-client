@@ -11,7 +11,11 @@ function getConfig() {
     if (util.isNullOrUndefined(configData) || configData === '') {
         return '';
     }
-    return JSON.parse(configData);
+    try {
+        return JSON.parse(configData);
+    } catch (e) {
+        return '';
+    }
 }
 
 module.exports = {getConfig};

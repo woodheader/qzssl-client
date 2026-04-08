@@ -4,6 +4,7 @@ var client = require('./com.wdqz/client');
 var resign = require('./com.wdqz/resign');
 var http = require('http');
 var path = require('path');
+var myutil = require('./com.wdqz/util');
 
 // express 应用
 var app = express();
@@ -16,6 +17,19 @@ app.use(express.static(path.join(__dirname, '../public')));
 
 // 创建 application/x-www-form-urlencoded 编码解析
 let urlencodedParser = bodyParser.urlencoded({ extended: false });
+
+process.on('uncaughtException', (err) => {
+    try {
+        myutil.writeLog('[FATAL] uncaughtException: ' + (err && err.stack ? err.stack : String(err)));
+    } catch (e) {}
+});
+
+process.on('unhandledRejection', (reason) => {
+    try {
+        myutil.writeLog('[FATAL] unhandledRejection: ' + (reason && reason.stack ? reason.stack : String(reason)));
+    } catch (e) {}
+});
+
 // 保存appId接口
 app.post('/api/config', urlencodedParser, function (req, res) {
     res.setHeader('Content-Type', 'application/json;charset=utf-8');
@@ -54,7 +68,13 @@ app.post('/api/domain-close', urlencodedParser, function (req, res) {
 // 批量关闭自动续签
 app.post('/api/domain-batch-close', urlencodedParser, function (req, res) {
     res.setHeader('Content-Type', 'application/json;charset=utf-8');
-    let removeList = JSON.parse(req.body.list);
+    let removeList;
+    try {
+        removeList = JSON.parse(req.body.list);
+    } catch (e) {
+        res.end(JSON.stringify({ code: 30000, msg: '参数list不是合法JSON', resultObject: [] }));
+        return false;
+    }
     if (removeList.length <= 0) {
         res.end(JSON.stringify({
             code: 30000,
@@ -73,7 +93,13 @@ app.post('/api/domain-batch-close', urlencodedParser, function (req, res) {
 // 批量开启续签
 app.post('/api/domain-batch-open', urlencodedParser, function (req, res) {
     res.setHeader('Content-Type', 'application/json;charset=utf-8');
-    let openList = JSON.parse(req.body.list);
+    let openList;
+    try {
+        openList = JSON.parse(req.body.list);
+    } catch (e) {
+        res.end(JSON.stringify({ code: 30000, msg: '参数list不是合法JSON', resultObject: [] }));
+        return false;
+    }
     if (openList.length <= 0) {
         res.end(JSON.stringify({
             code: 30000,
@@ -101,6 +127,11 @@ app.post('/api/sys-log', urlencodedParser, function (req, res) {
     res.setHeader('Content-Type', 'application/json;charset=utf-8');
     let result = client.getSystemLog();
     res.end(JSON.stringify(result));
+});
+
+app.get('/health', function (req, res) {
+    res.setHeader('Content-Type', 'application/json;charset=utf-8');
+    res.end(JSON.stringify({ ok: true }));
 });
 
 // 开启任务 - 定期检查证书是否即将过期

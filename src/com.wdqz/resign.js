@@ -142,7 +142,7 @@ function getHostListFromQz()
             });
             newDomainList.push(initData);
         });
-        fs.writeFileSync(domainDataPath, JSON.stringify(newDomainList), 'utf8');
+        myutil.atomicWriteFileSync(domainDataPath, JSON.stringify(newDomainList));
         logOk(jobId, 'SYNC', '同步完成：共 ' + list.length + ' 个域名，已写入 domain.json，耗时 ' + (Date.now() - startedAt) + 'ms');
     }).catch((error) => {
         logErr(jobId, 'SYNC', '同步异常：' + (error && error.message ? error.message : String(error)));

@@ -12,6 +12,19 @@ var domainDataPath = __dirname + '/../data/domain.json';
 // 日志文件
 var sysLogPath = __dirname + '/../data/log.json';
 
+function atomicWriteFileSync(filePath, content) {
+    const tmp = filePath + '.tmp-' + process.pid + '-' + Date.now();
+    try {
+        fs.writeFileSync(tmp, content, 'utf8');
+        fs.renameSync(tmp, filePath);
+    } finally {
+        try {
+            if (fs.existsSync(tmp)) fs.unlinkSync(tmp);
+        } catch (e) {
+        }
+    }
+}
+
 /**
  * 保存AppId和AppToken
  */
@@ -41,7 +54,7 @@ function saveConfig(appId, appToken) {
         app_token: appToken,
     };
     // 写文件
-    fs.writeFileSync(configPath, JSON.stringify(data), 'utf8');
+    atomicWriteFileSync(configPath, JSON.stringify(data));
     return {
         code: 10000,
         msg: '保存配置成功',
@@ -67,7 +80,17 @@ function getDomainList(domain, page, pagesize)
     if (domainData === null || domainData === '') {
         domainData = '[]';
     }
-    let domainList = JSON.parse(domainData);
+    let domainList;
+    try {
+        domainList = JSON.parse(domainData);
+    } catch (e) {
+        return {
+            code: 30000,
+            msg: '数据文件解析失败，请稍后重试(可能正在同步写入)',
+            resultObject: []
+        };
+    }
+    if (!Array.isArray(domainList)) domainList = [];
     if (domain !== '' && domain !== null && domain !== undefined) {
         let searchList = [];
         domainList.forEach((item, index) => {
@@ -201,7 +224,7 @@ function saveDomain(host, txt_dir, ssl_certificate, ssl_certificate_key, saveTyp
         domainList.unshift(newData);
     }
     // 回写
-    fs.writeFileSync(domainDataPath, JSON.stringify(domainList), 'utf8');
+    atomicWriteFileSync(domainDataPath, JSON.stringify(domainList));
     return {
         code: 10000,
         msg: '保存域名成功',
