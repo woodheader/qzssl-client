@@ -197,4 +197,37 @@ function updateDomainStatus(host, sign_status, sign_status_title)
     atomicWriteFileSync(domainPath, JSON.stringify(newDomainList));
 }
 
-module.exports = {generateToken, writeLog, downloadFile, removeFile, moveFile, updateDomainStatus, atomicWriteFileSync};
+function updateDomainFields(host, patch)
+{
+    const domainPath = __dirname + '/../data/domain.json';
+    if (!fs.existsSync(domainPath)) {
+        return false;
+    }
+    let domainJson = fs.readFileSync(domainPath, 'utf8');
+    let domainList;
+    try {
+        domainList = JSON.parse(domainJson);
+    } catch (e) {
+        writeLog('domain.json 解析失败，无法更新字段：' + e.message);
+        return false;
+    }
+    if (!Array.isArray(domainList) || domainList.length <= 0) {
+        return false;
+    }
+    if (!patch || typeof patch !== 'object' || Array.isArray(patch)) {
+        return false;
+    }
+    let changed = false;
+    const newDomainList = domainList.map((item) => {
+        if (item && item.host === host) {
+            changed = true;
+            return Object.assign({}, item, patch);
+        }
+        return item;
+    });
+    if (!changed) return false;
+    atomicWriteFileSync(domainPath, JSON.stringify(newDomainList));
+    return true;
+}
+
+module.exports = {generateToken, writeLog, downloadFile, removeFile, moveFile, updateDomainStatus, updateDomainFields, atomicWriteFileSync};
