@@ -2,6 +2,7 @@ var util = require('util');
 var fs = require('fs');
 var WebSocket = require('ws');
 const chokidar = require('chokidar');
+const path = require('path');
 
 // 配置文件
 var configPath = __dirname + '/../data/config.json';
@@ -12,7 +13,15 @@ var domainDataPath = __dirname + '/../data/domain.json';
 // 日志文件
 var sysLogPath = __dirname + '/../data/log.json';
 
+function ensureDirForFile(filePath) {
+    try {
+        fs.mkdirSync(path.dirname(filePath), { recursive: true });
+    } catch (e) {
+    }
+}
+
 function atomicWriteFileSync(filePath, content) {
+    ensureDirForFile(filePath);
     const tmp = filePath + '.tmp-' + process.pid + '-' + Date.now();
     try {
         fs.writeFileSync(tmp, content, 'utf8');
@@ -43,18 +52,21 @@ function saveConfig(appId, appToken) {
             resultObject: []
         };
     }
-    // 配置文件路径
-    // 检查文件是否存在，不存在就创建
-    if (!fs.existsSync(configPath)) {
-        fs.writeFileSync(configPath, '', 'utf8');
-    }
     // 读取文件，当文件为空时，保存成功后，执行一次查询和办理
     let data = {
         app_id: appId,
         app_token: appToken,
     };
     // 写文件
-    atomicWriteFileSync(configPath, JSON.stringify(data));
+    try {
+        atomicWriteFileSync(configPath, JSON.stringify(data));
+    } catch (e) {
+        return {
+            code: 30000,
+            msg: '保存配置失败：' + (e && e.message ? e.message : String(e)),
+            resultObject: []
+        };
+    }
     return {
         code: 10000,
         msg: '保存配置成功',
@@ -152,7 +164,15 @@ function saveDomain(host, txt_dir, ssl_certificate, ssl_certificate_key, saveTyp
         };
     }
     if (!fs.existsSync(domainDataPath)) {
-        fs.writeFileSync(domainDataPath, '[]', 'utf8');
+        try {
+            atomicWriteFileSync(domainDataPath, '[]');
+        } catch (e) {
+            return {
+                code: 30000,
+                msg: '初始化数据文件失败：' + (e && e.message ? e.message : String(e)),
+                resultObject: []
+            };
+        }
     }
     let data = fs.readFileSync(domainDataPath, 'utf8');
     if (util.isNullOrUndefined(data) || data === '') data = '[]';
@@ -224,7 +244,15 @@ function saveDomain(host, txt_dir, ssl_certificate, ssl_certificate_key, saveTyp
         domainList.unshift(newData);
     }
     // 回写
-    atomicWriteFileSync(domainDataPath, JSON.stringify(domainList));
+    try {
+        atomicWriteFileSync(domainDataPath, JSON.stringify(domainList));
+    } catch (e) {
+        return {
+            code: 30000,
+            msg: '保存域名失败：' + (e && e.message ? e.message : String(e)),
+            resultObject: []
+        };
+    }
     return {
         code: 10000,
         msg: '保存域名成功',
@@ -241,9 +269,9 @@ function configInfo()
     // 检查文件是否存在
     if (!fs.existsSync(configPath)) {
         return {
-            code: 30000,
-            msg: '配置文件不存在!',
-            resultObject: []
+            code: 10000,
+            msg: 'success',
+            resultObject: {}
         };
     }
     // 读取数据文件
@@ -276,9 +304,14 @@ function getSystemLog()
 {
     // 检查文件是否存在
     if (!fs.existsSync(sysLogPath)) {
+        try {
+            ensureDirForFile(sysLogPath);
+            fs.writeFileSync(sysLogPath, '', 'utf8');
+        } catch (e) {
+        }
         return {
-            code: 30000,
-            msg: '日志文件不存在!',
+            code: 10000,
+            msg: 'success',
             resultObject: []
         };
     }

@@ -111,6 +111,10 @@ function getHostListFromQz()
             curDomainList = [];
         }
         if (!Array.isArray(curDomainList)) curDomainList = [];
+        const curByHost = new Map();
+        curDomainList.forEach((item) => {
+            if (item && item.host) curByHost.set(item.host, item);
+        });
         list.forEach((itemNew) => {
             let initData = {
                 host: itemNew.host,
@@ -130,29 +134,56 @@ function getHostListFromQz()
                 installed_ssl_certificate_key: '',
                 installed_time: ''
             }
-            let hostNew = itemNew.host;
-            curDomainList.forEach((itemCur) => {
-                let hostCur = itemCur.host;
-                if (hostCur === hostNew) {
-                    initData.open_status = itemCur.open_status;
-                    initData.txt_dir = itemCur.txt_dir;
-                    initData.ssl_certificate = itemCur.ssl_certificate;
-                    initData.ssl_certificate_key = itemCur.ssl_certificate_key;
-                    initData.installed_end_time = itemCur.installed_end_time || '';
-                    initData.installed_download_url = itemCur.installed_download_url || '';
-                    initData.installed_ssl_certificate = itemCur.installed_ssl_certificate || '';
-                    initData.installed_ssl_certificate_key = itemCur.installed_ssl_certificate_key || '';
-                    initData.installed_time = itemCur.installed_time || '';
-                    // 本地状态是“续签完成”时：仅当平台返回“待申请”(无续签订单)或平台返回“已签发且与本地已安装一致”才保留本地完成态；否则以平台状态为准
-                    if (itemCur.sign_status === 35 && (itemNew.sign_status === 10 || (itemNew.sign_status === 30 && itemCur.installed_end_time && itemCur.installed_end_time === itemNew.end_time))) {
-                        initData.sign_status = itemCur.sign_status;
-                        initData.sign_status_title = itemCur.sign_status_title;
-                    }
+            const itemCur = curByHost.get(itemNew.host);
+            if (itemCur) {
+                initData.open_status = itemCur.open_status;
+                initData.txt_dir = itemCur.txt_dir;
+                initData.ssl_certificate = itemCur.ssl_certificate;
+                initData.ssl_certificate_key = itemCur.ssl_certificate_key;
+                initData.installed_end_time = itemCur.installed_end_time || '';
+                initData.installed_download_url = itemCur.installed_download_url || '';
+                initData.installed_ssl_certificate = itemCur.installed_ssl_certificate || '';
+                initData.installed_ssl_certificate_key = itemCur.installed_ssl_certificate_key || '';
+                initData.installed_time = itemCur.installed_time || '';
+                // 本地状态是“续签完成”时：仅当平台返回“待申请”(无续签订单)或平台返回“已签发且与本地已安装一致”才保留本地完成态；否则以平台状态为准
+                if (itemCur.sign_status === 35 && (itemNew.sign_status === 10 || (itemNew.sign_status === 30 && itemCur.installed_end_time && itemCur.installed_end_time === itemNew.end_time))) {
+                    initData.sign_status = itemCur.sign_status;
+                    initData.sign_status_title = itemCur.sign_status_title;
                 }
-            });
+            }
             newDomainList.push(initData);
         });
-        myutil.atomicWriteFileSync(domainDataPath, JSON.stringify(newDomainList));
+        let latestDomainList;
+        try {
+            latestDomainList = JSON.parse(fs.readFileSync(domainDataPath, 'utf8') || '[]');
+        } catch (e) {
+            latestDomainList = [];
+        }
+        if (!Array.isArray(latestDomainList)) latestDomainList = [];
+        const latestByHost = new Map();
+        latestDomainList.forEach((item) => {
+            if (item && item.host) latestByHost.set(item.host, item);
+        });
+        const mergedList = newDomainList.map((itemNew) => {
+            const local = latestByHost.get(itemNew.host);
+            if (!local) return itemNew;
+            const merged = Object.assign({}, itemNew);
+            merged.open_status = local.open_status;
+            merged.txt_dir = local.txt_dir;
+            merged.ssl_certificate = local.ssl_certificate;
+            merged.ssl_certificate_key = local.ssl_certificate_key;
+            merged.installed_end_time = local.installed_end_time || '';
+            merged.installed_download_url = local.installed_download_url || '';
+            merged.installed_ssl_certificate = local.installed_ssl_certificate || '';
+            merged.installed_ssl_certificate_key = local.installed_ssl_certificate_key || '';
+            merged.installed_time = local.installed_time || '';
+            if (local.sign_status === 35 && (merged.sign_status === 10 || (merged.sign_status === 30 && local.installed_end_time && local.installed_end_time === merged.end_time))) {
+                merged.sign_status = local.sign_status;
+                merged.sign_status_title = local.sign_status_title;
+            }
+            return merged;
+        });
+        myutil.atomicWriteFileSync(domainDataPath, JSON.stringify(mergedList));
         logOk(jobId, 'SYNC', '同步完成：共 ' + list.length + ' 个域名，已写入 domain.json，耗时 ' + (Date.now() - startedAt) + 'ms');
     }).catch((error) => {
         logErr(jobId, 'SYNC', '同步异常：' + (error && error.message ? error.message : String(error)));
@@ -300,13 +331,12 @@ function validateAndInstall()
             if (item.sign_status === 30) {
                 const stepStart = Date.now();
                 if (item.installed_end_time && item.installed_end_time === item.end_time) {
-                    const sameDownload = item.installed_download_url && item.installed_download_url === item.ssl_download_url;
                     const samePath = item.installed_ssl_certificate && item.installed_ssl_certificate_key
                         && item.installed_ssl_certificate === item.ssl_certificate
                         && item.installed_ssl_certificate_key === item.ssl_certificate_key;
                     const pemOk = item.ssl_certificate && fs.existsSync(item.ssl_certificate);
                     const keyOk = item.ssl_certificate_key && fs.existsSync(item.ssl_certificate_key);
-                    if (sameDownload && samePath && pemOk && keyOk) {
+                    if (samePath && pemOk && keyOk) {
                         logOk(jobId, 'INSTALL:' + item.host, '证书已安装且未变化，跳过下载/部署（end_time=' + item.end_time + '）');
                         return;
                     }
